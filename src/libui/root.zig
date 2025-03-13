@@ -1,26 +1,43 @@
 const rl = @import("raylib");
 
 const Vec2 = @Vector(2, f32);
+const Vec4 = @Vector(4, f32);
 
-pub const Widget = union(enum) {
-    button: struct { pos: Vec2, size: Vec2, text: [:0]const u8, fontSize: i32 },
-    grid: struct { pos: Vec2, size: Vec2, rows: u8, cols: u8 },
+pub const WidgetPayload = union(enum) {
+    button: struct { text: [:0]const u8, fontSize: i32 },
+    grid: struct { rows: u8, cols: u8 },
 };
 
+pub const Widget = struct {
+    pos: Vec2,
+    size: Vec2,
+    payload: WidgetPayload,
+};
+
+pub const Style = struct {};
+
+const FONT_SPACING = 2.0;
+
+pub fn layout(widget: *const Widget) void {
+    _ = widget;
+}
+
 pub fn drawWidget(widget: *const Widget) void {
-    switch (widget.*) {
+    layout(widget);
+    switch (widget.payload) {
         .button => |payload| {
+            const textSize = rl.measureText(payload.text, payload.fontSize);
             rl.drawRectangle(
-                @intFromFloat(payload.pos[0]),
-                @intFromFloat(payload.pos[1]),
-                @intFromFloat(payload.size[0]),
-                @intFromFloat(payload.size[1]),
+                @intFromFloat(widget.pos[0]),
+                @intFromFloat(widget.pos[1]),
+                textSize,
+                payload.fontSize,
                 rl.Color.light_gray,
             );
             rl.drawText(
                 payload.text,
-                @intFromFloat(payload.pos[0]),
-                @intFromFloat(payload.pos[1]),
+                @intFromFloat(widget.pos[0]),
+                @intFromFloat(widget.pos[1]),
                 payload.fontSize,
                 rl.Color.red,
             );
@@ -28,14 +45,14 @@ pub fn drawWidget(widget: *const Widget) void {
         .grid => |payload| {
             const rowsF = @as(f32, @floatFromInt(payload.rows));
             const colsF = @as(f32, @floatFromInt(payload.cols));
-            const offsetX = payload.size[0] / rowsF;
-            const offsetY = payload.size[1] / colsF;
-            const sizeCell = .{ payload.size[0] / rowsF, payload.size[1] / colsF };
+            const offsetX = widget.size[0] / rowsF;
+            const offsetY = widget.size[1] / colsF;
+            const sizeCell = .{ widget.size[0] / rowsF, widget.size[1] / colsF };
             for (0..payload.rows) |row| {
                 for (0..payload.cols) |col| {
                     rl.drawRectangleLines(
-                        @intFromFloat(payload.pos[0] + offsetX * @as(f32, @floatFromInt(row))),
-                        @intFromFloat(payload.pos[1] + offsetY * @as(f32, @floatFromInt(col))),
+                        @intFromFloat(widget.pos[0] + offsetX * @as(f32, @floatFromInt(row))),
+                        @intFromFloat(widget.pos[1] + offsetY * @as(f32, @floatFromInt(col))),
                         @intFromFloat(sizeCell[0]),
                         @intFromFloat(sizeCell[1]),
                         rl.Color.light_gray,
