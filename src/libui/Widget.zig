@@ -1,34 +1,29 @@
 const std = @import("std");
 const rl = @import("raylib");
 
+const Event = @import("event.zig").Event;
+
 const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
-
-var default_allocator = std.heap.DebugAllocator(.{}){};
-const allocator = default_allocator.allocator();
 
 pub const WidgetPayload = union(enum) {
     button: struct { text: [:0]const u8, fontSize: i32 },
     // let's assume single line text input only
-    text_input: struct { text: [:0]const u8, fontSize: i32, cursorPos: usize },
+    text_input: struct { text: std.ArrayList(u8), fontSize: i32, cursorPos: usize },
     grid: struct { rows: u8, cols: u8 },
 };
 
-pub const Widget = struct {
-    pos: Vec2,
-    size: Vec2,
-    payload: WidgetPayload,
-};
-
-pub const Style = struct {};
-
 const FONT_SPACING = 2.0;
 
-pub fn layout(widget: *const Widget) void {
+pos: Vec2 = undefined,
+size: Vec2 = undefined,
+payload: WidgetPayload = undefined,
+
+pub fn layout(widget: *const @This()) void {
     _ = widget;
 }
 
-pub fn drawWidget(widget: *const Widget) void {
+pub fn draw(widget: *const @This(), allocator: std.mem.Allocator) !void {
     layout(widget);
     switch (widget.payload) {
         .button => |payload| {
@@ -68,12 +63,18 @@ pub fn drawWidget(widget: *const Widget) void {
         },
         .text_input => |payload| {
             const cursor_size: i32 = 4;
-            const text_size = rl.measureText(payload.text, payload.fontSize) + cursor_size * 2;
 
-            // todo: this is ridiculous
-            const c_string = std.fmt.allocPrintZ(allocator, "{s}", .{payload.text[0..payload.cursorPos]}) catch unreachable;
-            const cursor_pos = rl.measureText(c_string, payload.fontSize);
+            const info = rl.getGlyphInfo(try rl.getFontDefault(), 'a');
+            _ = info;
+            const text_c_string = try allocator.dupeZ(u8, payload.text.items);
+            defer allocator.free(text_c_string);
+            const partial_text_c_string = try allocator.dupeZ(u8, payload.text.items[0..payload.cursorPos]);
+            defer allocator.free(partial_text_c_string);
 
+            const text_size = rl.measureText(text_c_string, payload.fontSize) + cursor_size * 2;
+            const cursor_pos = rl.measureText(partial_text_c_string, payload.fontSize);
+
+            // background:
             rl.drawRectangle(
                 @as(i32, @intFromFloat(widget.pos[0])) + cursor_size,
                 @intFromFloat(widget.pos[1]),
@@ -81,8 +82,9 @@ pub fn drawWidget(widget: *const Widget) void {
                 payload.fontSize,
                 rl.Color.light_gray,
             );
+            // text:
             rl.drawText(
-                payload.text,
+                text_c_string,
                 @as(i32, @intFromFloat(widget.pos[0])) + cursor_size,
                 @intFromFloat(widget.pos[1]),
                 payload.fontSize,
@@ -90,7 +92,7 @@ pub fn drawWidget(widget: *const Widget) void {
             );
             // draw cursor:
             rl.drawRectangle(
-                @intFromFloat(widget.pos[0] + @as(f32, @floatFromInt(cursor_pos))),
+                @as(i32, @intFromFloat(widget.pos[0] + @as(f32, @floatFromInt(cursor_pos)))) + cursor_size / 2,
                 @intFromFloat(widget.pos[1]),
                 cursor_size,
                 payload.fontSize,
@@ -100,8 +102,31 @@ pub fn drawWidget(widget: *const Widget) void {
     }
 }
 
-pub const Event = union(enum) {
-    mouseEnter: void,
-    mouseLeave: void,
-    click: void,
-};
+pub fn defaultAction(self: *@This(), event: Event) !void {
+    switch (self.payload) {
+        .text_input => |*payload| {
+            switch (event) {
+                .key => |keyEvent| {
+                    const maybe_char = keyEvent.toCharacter();
+                    if (maybe_char) |char| {
+                        try payload.text.insert(payload.cursorPos, char);
+                        payload.cursorPos += 1;
+                    } else if (keyEvent.code == .backspace and payload.cursorPos > 0) {
+                        payload.cursorPos -= 1;
+                        _ = payload.text.orderedRemove(payload.cursorPos);
+                    } else if (keyEvent.code == .delete and payload.text.items.len > payload.cursorPos) {
+                        _ = payload.text.orderedRemove(payload.cursorPos);
+                    } else if (keyEvent.code == .left and payload.cursorPos > 0) {
+                        payload.cursorPos -= 1;
+                    } else if (keyEvent.code == .right and payload.cursorPos < payload.text.items.len) {
+                        payload.cursorPos += 1;
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {
+            // todo
+        },
+    }
+}

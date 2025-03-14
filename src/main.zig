@@ -1,14 +1,19 @@
+const std = @import("std");
+
 const Application = @import("libui/Application.zig");
-const root = @import("libui/root.zig");
+const Widget = @import("libui/Widget.zig");
 
 pub fn main() anyerror!void {
-    Application.init(.{ .width = 800, .height = 600, .title = "Hello, world!" });
-    defer Application.close();
+    var alloc = std.heap.DebugAllocator(.{}){};
+    defer _ = alloc.deinit();
 
-    const button = root.Widget{
-        .payload = root.WidgetPayload{ .text_input = .{
-            .fontSize = 40,
-            .text = "Hello, button!",
+    var app = Application.init(.{ .width = 800, .height = 600, .title = "Hello, world!" }, alloc.allocator());
+    defer app.close();
+
+    var text_input = Widget{
+        .payload = Widget.WidgetPayload{ .text_input = .{
+            .fontSize = 16,
+            .text = std.ArrayList(u8).init(alloc.allocator()),
             .cursorPos = 0,
         } },
         .pos = .{ 10, 10 },
@@ -21,5 +26,12 @@ pub fn main() anyerror!void {
     //     .rows = 3,
     // } };
 
-    Application.draw(&button);
+    while (!app.shouldClose()) {
+        try app.draw(&text_input, alloc.allocator());
+        try app.pollEvents();
+        while (app.inputQueue.pop()) |event| {
+            std.log.debug("Event {?}", .{event});
+            try text_input.defaultAction(event);
+        }
+    }
 }
