@@ -6,9 +6,10 @@ pub fn main() anyerror!void {
     defer Application.close();
 
     const button = root.Widget{
-        .payload = root.WidgetPayload{ .button = .{
+        .payload = root.WidgetPayload{ .text_input = .{
             .fontSize = 40,
             .text = "Hello, button!",
+            .cursorPos = 0,
         } },
         .pos = .{ 10, 10 },
         .size = .{ 30, 30 },

@@ -1,10 +1,16 @@
+const std = @import("std");
 const rl = @import("raylib");
 
 const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
 
+var default_allocator = std.heap.DebugAllocator(.{}){};
+const allocator = default_allocator.allocator();
+
 pub const WidgetPayload = union(enum) {
     button: struct { text: [:0]const u8, fontSize: i32 },
+    // let's assume single line text input only
+    text_input: struct { text: [:0]const u8, fontSize: i32, cursorPos: usize },
     grid: struct { rows: u8, cols: u8 },
 };
 
@@ -59,6 +65,37 @@ pub fn drawWidget(widget: *const Widget) void {
                     );
                 }
             }
+        },
+        .text_input => |payload| {
+            const cursor_size: i32 = 4;
+            const text_size = rl.measureText(payload.text, payload.fontSize) + cursor_size * 2;
+
+            // todo: this is ridiculous
+            const c_string = std.fmt.allocPrintZ(allocator, "{s}", .{payload.text[0..payload.cursorPos]}) catch unreachable;
+            const cursor_pos = rl.measureText(c_string, payload.fontSize);
+
+            rl.drawRectangle(
+                @as(i32, @intFromFloat(widget.pos[0])) + cursor_size,
+                @intFromFloat(widget.pos[1]),
+                text_size,
+                payload.fontSize,
+                rl.Color.light_gray,
+            );
+            rl.drawText(
+                payload.text,
+                @as(i32, @intFromFloat(widget.pos[0])) + cursor_size,
+                @intFromFloat(widget.pos[1]),
+                payload.fontSize,
+                rl.Color.red,
+            );
+            // draw cursor:
+            rl.drawRectangle(
+                @intFromFloat(widget.pos[0] + @as(f32, @floatFromInt(cursor_pos))),
+                @intFromFloat(widget.pos[1]),
+                cursor_size,
+                payload.fontSize,
+                rl.Color.init(0, 0, 0, 160),
+            );
         },
     }
 }
