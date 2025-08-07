@@ -1,90 +1,33 @@
+pub const KeyCode = enum {
+    // zig fmt: off
+    a, b, c, d, e, f, g, h, i, j, k, l, m, 
+    n, o, p, q, r, s, t, u, v, w, x, y, z,
+
+    right, left, down, up, period,
+    comma, space, escape, enter, tab,
+    backspace, insert, delete,
+    // zig fmt: on
+};
+
+pub const KeyEvent = struct {
+    code: KeyCode,
+    ctrl: bool,
+    shift: bool,
+};
+pub const ClickEvent = struct {
+    x: u16,
+    y: u16,
+    leftMouseButton: bool,
+    middleMouseButton: bool,
+    rightMouseButton: bool,
+};
+// Unicode character
+pub const CharEvent = u32;
+
 pub const Event = union(enum) {
-    pub const KeyEvent = struct {
-        code: KeyCode,
-        shift: bool,
-        pub fn toCharacter(self: KeyEvent) ?u8 {
-            return switch (self.code) {
-                .a => if (self.shift) 'A' else 'a',
-                .b => if (self.shift) 'B' else 'b',
-                .c => if (self.shift) 'C' else 'c',
-                .d => if (self.shift) 'D' else 'd',
-                .e => if (self.shift) 'E' else 'e',
-                .f => if (self.shift) 'F' else 'f',
-                .g => if (self.shift) 'G' else 'g',
-                .h => if (self.shift) 'H' else 'h',
-                .i => if (self.shift) 'I' else 'i',
-                .j => if (self.shift) 'J' else 'j',
-                .k => if (self.shift) 'K' else 'k',
-                .l => if (self.shift) 'L' else 'l',
-                .m => if (self.shift) 'M' else 'm',
-                .n => if (self.shift) 'N' else 'n',
-                .o => if (self.shift) 'O' else 'o',
-                .p => if (self.shift) 'P' else 'p',
-                .q => if (self.shift) 'Q' else 'q',
-                .r => if (self.shift) 'R' else 'r',
-                .s => if (self.shift) 'S' else 's',
-                .t => if (self.shift) 'T' else 't',
-                .u => if (self.shift) 'U' else 'u',
-                .v => if (self.shift) 'V' else 'v',
-                .w => if (self.shift) 'W' else 'w',
-                .x => if (self.shift) 'X' else 'x',
-                .y => if (self.shift) 'Y' else 'y',
-                .z => if (self.shift) 'Z' else 'z',
-                .space => ' ',
-                .period => '.',
-                .comma => ',',
-                else => null,
-            };
-        }
-    };
-
-    mouseEnter: void,
-    mouseLeave: void,
-    click: void,
-    key: KeyEvent,
-
-    pub const KeyCode = enum {
-        right,
-        left,
-        down,
-        up,
-
-        a,
-        b,
-        c,
-        d,
-        e,
-        f,
-        g,
-        h,
-        i,
-        j,
-        k,
-        l,
-        m,
-        n,
-        o,
-        p,
-        q,
-        r,
-        s,
-        t,
-        u,
-        v,
-        w,
-        x,
-        y,
-        z,
-
-        period,
-        comma,
-
-        space,
-        escape,
-        enter,
-        tab,
-        backspace,
-        insert,
-        delete,
-    };
+    mouseEnterEvent: void,
+    mouseLeaveEvent: void,
+    clickEvent: ClickEvent,
+    keyEvent: KeyEvent,
+    charEvent: CharEvent,
 };

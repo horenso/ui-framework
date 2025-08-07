@@ -2,7 +2,10 @@ const std = @import("std");
 const rl = @import("raylib");
 
 const Widget = @import("Widget.zig");
-const Event = @import("event.zig").Event;
+
+const event = @import("event.zig");
+const Event = event.Event;
+const KeyCode = event.KeyCode;
 
 const Config = struct {
     width: comptime_int,
@@ -15,6 +18,12 @@ const InputState = struct {
     rightMouseDown: bool = false,
 };
 
+const KeyboardInputMode = enum {
+    Key,
+    Character,
+};
+
+keyboardInputMode: KeyboardInputMode = .Key,
 inputState: InputState = InputState{},
 inputQueue: std.ArrayList(Event),
 allocator: std.mem.Allocator,
@@ -50,73 +59,76 @@ pub fn shouldClose(self: *@This()) bool {
     return rl.windowShouldClose();
 }
 
+fn pollKey(self: *@This()) !void {
+    const key = rl.getKeyPressed();
+    const keycode: KeyCode = switch (key) {
+        .null => return,
+
+        .a => .a,
+        .b => .b,
+        .c => .c,
+        .d => .d,
+        .e => .e,
+        .f => .f,
+        .g => .g,
+        .h => .h,
+        .i => .i,
+        .j => .j,
+        .k => .k,
+        .l => .l,
+        .m => .m,
+        .n => .n,
+        .o => .o,
+        .p => .p,
+        .q => .q,
+        .r => .r,
+        .s => .s,
+        .t => .t,
+        .u => .u,
+        .v => .v,
+        .w => .w,
+        .x => .x,
+        .y => .y,
+        .z => .z,
+
+        .left => .left,
+        .right => .right,
+        .up => .up,
+        .down => .down,
+
+        .backspace => .backspace,
+        .delete => .delete,
+        .space => .space,
+
+        .period => .period,
+        .comma => .comma,
+        else => return,
+    };
+    try self.inputQueue.append(Event{ .keyEvent = .{
+        .code = keycode,
+        .ctrl = rl.isKeyDown(rl.KeyboardKey.left_control) or rl.isKeyDown(rl.KeyboardKey.right_control),
+        .shift = rl.isKeyDown(rl.KeyboardKey.left_shift) or rl.isKeyDown(rl.KeyboardKey.right_shift),
+    } });
+}
+
 pub fn pollEvents(self: *@This()) !void {
     if (!self.inputState.leftMouseDown and rl.isMouseButtonDown(rl.MouseButton.left)) {
         self.inputState.leftMouseDown = true;
-        std.log.debug("mouse button 0 down!", .{});
     }
     if (self.inputState.leftMouseDown and rl.isMouseButtonUp(rl.MouseButton.left)) {
         self.inputState.leftMouseDown = false;
-        std.log.debug("mouse button 0 up!", .{});
-        std.log.debug("mouse button 0 clicked!", .{});
     }
 
     // keyboard:
-    while (true) {
-        const key = rl.getKeyPressed();
-
-        std.log.debug("{}", .{key});
-
-        const keycode: Event.KeyCode = switch (key) {
-            .null => break,
-
-            .a => .a,
-            .b => .b,
-            .c => .c,
-            .d => .d,
-            .e => .e,
-            .f => .f,
-            .g => .g,
-            .h => .h,
-            .i => .i,
-            .j => .j,
-            .k => .k,
-            .l => .l,
-            .m => .m,
-            .n => .n,
-            .o => .o,
-            .p => .p,
-            .q => .q,
-            .r => .r,
-            .s => .s,
-            .t => .t,
-            .u => .u,
-            .v => .v,
-            .w => .w,
-            .x => .x,
-            .y => .y,
-            .z => .z,
-
-            .left => .left,
-            .right => .right,
-            .up => .up,
-            .down => .down,
-
-            .backspace => .backspace,
-            .delete => .delete,
-            .space => .space,
-
-            .period => .period,
-            .comma => .comma,
-
-            else => {
-                std.log.debug("IGNORING EVENT: {?}", .{key});
-                continue;
-            },
-        };
-        try self.inputQueue.append(Event{ .key = .{
-            .code = keycode,
-            .shift = rl.isKeyDown(rl.KeyboardKey.left_shift) or rl.isKeyDown(rl.KeyboardKey.right_shift),
-        } });
+    if (self.keyboardInputMode == .Character) {
+        const charPressed: u32 = @intCast(rl.getCharPressed());
+        if (charPressed == 0) {
+            try pollKey(self);
+        } else {
+            // const charScalar: u21 = @truncate(charPressed);
+            try self.inputQueue.append(Event{ .charEvent = charPressed });
+        }
+    } else {
+        try pollKey(self);
     }
 }
