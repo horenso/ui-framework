@@ -6,6 +6,7 @@ const Widget = @import("Widget.zig");
 const event = @import("event.zig");
 const Event = event.Event;
 const KeyCode = event.KeyCode;
+const FontManager = @import("FontManager.zig");
 
 const Config = struct {
     width: comptime_int,
@@ -28,19 +29,24 @@ inputState: InputState = InputState{},
 inputQueue: std.ArrayList(Event),
 allocator: std.mem.Allocator,
 
-pub fn init(comptime config: Config, allocator: std.mem.Allocator) @This() {
+fontManager: FontManager,
+fontSize: i32,
+
+pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
     rl.initWindow(config.width, config.height, config.title);
     rl.setTargetFPS(60);
     const app = @This(){
         .allocator = allocator,
         .inputQueue = std.ArrayList(Event).init(allocator),
+        .fontManager = FontManager.init(allocator),
+        .fontSize = 20,
     };
-    // todo: ???
     return app;
 }
 
-pub fn close(self: @This()) void {
+pub fn deinit(self: *@This()) void {
     self.inputQueue.deinit();
+    self.fontManager.deinit();
     rl.closeWindow();
 }
 
@@ -91,6 +97,17 @@ fn pollKey(self: *@This()) !void {
         .y => .y,
         .z => .z,
 
+        .zero => .num0,
+        .one => .num1,
+        .two => .num2,
+        .three => .num3,
+        .four => .num4,
+        .five => .num5,
+        .six => .num6,
+        .seven => .num7,
+        .eight => .num8,
+        .nine => .num9,
+
         .left => .left,
         .right => .right,
         .up => .up,
@@ -122,11 +139,12 @@ pub fn pollEvents(self: *@This()) !void {
     // keyboard:
     if (self.keyboardInputMode == .Character) {
         const charPressed: u32 = @intCast(rl.getCharPressed());
-        if (charPressed == 0) {
-            try pollKey(self);
-        } else {
-            // const charScalar: u21 = @truncate(charPressed);
+        if (charPressed != 0) {
+            _ = rl.getKeyPressed();
             try self.inputQueue.append(Event{ .charEvent = charPressed });
+        } else {
+            try pollKey(self);
+            // const charScalar: u21 = @truncate(charPressed);
         }
     } else {
         try pollKey(self);

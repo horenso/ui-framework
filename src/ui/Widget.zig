@@ -1,6 +1,7 @@
 const std = @import("std");
 const rl = @import("raylib");
 
+const Application = @import("Application.zig");
 const Event = @import("event.zig").Event;
 
 const Vec2 = @Vector(2, f32);
@@ -10,7 +11,12 @@ pub const WidgetPayload = union(enum) {
     button: struct { text: [:0]const u8, fontSize: i32 },
     // let's assume single line text input only
     // todo: should we encode in UTF-16?
-    text_input: struct { codepoints: std.ArrayList(u32), fontSize: i32, cursorPos: usize },
+    text_input: struct {
+        codepoints: std.ArrayList(u32),
+        fontSize: i32,
+        cursorRow: usize,
+        cursorCol: usize,
+    },
     grid: struct { rows: u8, cols: u8 },
 };
 
@@ -19,9 +25,24 @@ const FONT_SPACING = 2.0;
 pos: Vec2 = undefined,
 size: Vec2 = undefined,
 payload: WidgetPayload = undefined,
+app: *Application,
 
 pub fn layout(widget: *const @This()) void {
     _ = widget;
+}
+
+pub fn TextInput(allocator: std.mem.Allocator, app: *Application) !@This() {
+    return @This(){
+        .payload = WidgetPayload{ .text_input = .{
+            .fontSize = 40,
+            .codepoints = std.ArrayList(u32).init(allocator),
+            .cursorRow = 0,
+            .cursorCol = 0,
+        } },
+        .pos = .{ 10, 10 },
+        .size = .{ 40, 40 },
+        .app = app,
+    };
 }
 
 pub fn draw(widget: *const @This(), allocator: std.mem.Allocator) !void {
@@ -64,43 +85,38 @@ pub fn draw(widget: *const @This(), allocator: std.mem.Allocator) !void {
             }
         },
         .text_input => |payload| {
-            // const cursor_size: i32 = 4;
-
-            // const info = rl.getGlyphInfo(try rl.getFontDefault(), 'a');
-            // _ = info;
-            // const text_c_string = try allocator.dupeZ(u8, payload.codepoints.items);
-            // defer allocator.free(text_c_string);
-            // const partial_text_c_string = try allocator.dupeZ(u8, payload.codepoints.items[0..payload.cursorPos]);
-            // defer allocator.free(partial_text_c_string);
-
-            // const text_size = rl.measureText(text_c_string, payload.fontSize) + cursor_size * 2;
-            // const cursor_pos = rl.measureText(partial_text_c_string, payload.fontSize);
-
+            const fontSize = widget.app.fontSize;
             // background:
-            // rl.drawRectangle(
-            //     @as(i32, @intFromFloat(widget.pos[0])) + cursor_size,
-            //     @intFromFloat(widget.pos[1]),
-            //     text_size,
-            //     payload.fontSize,
-            //     rl.Color.light_gray,
-            // );
+            rl.drawRectangle(
+                @intFromFloat(widget.pos[0]),
+                @intFromFloat(widget.pos[1]),
+                1000,
+                fontSize,
+                rl.Color.light_gray,
+            );
             // text:
+            const font = try widget.app.fontManager.getFont(@intCast(fontSize));
+            const fontSizeFloat: f32 = @floatFromInt(fontSize);
+            const spacing: comptime_float = 1.0;
+            const fontWidth = rl.measureTextEx(font, "A", fontSizeFloat, spacing).x;
             rl.drawTextCodepoints(
-                try rl.getFontDefault(),
+                font,
                 @ptrCast(payload.codepoints.items),
                 rl.Vector2{ .x = widget.pos[0], .y = widget.pos[1] },
-                40,
-                1.0,
+                fontSizeFloat,
+                spacing,
                 rl.Color.red,
             );
+
             // draw cursor:
-            // rl.drawRectangle(
-            //     @as(i32, @intFromFloat(widget.pos[0] + @as(f32, @floatFromInt(cursor_pos)))) + cursor_size / 2,
-            //     @intFromFloat(widget.pos[1]),
-            //     cursor_size,
-            //     payload.fontSize,
-            //     rl.Color.init(0, 0, 0, 160),
-            // );
+            const cursorX: f32 = widget.pos[0] + (fontWidth + spacing) * @as(f32, @floatFromInt(payload.cursorCol));
+            rl.drawRectangle(
+                @intFromFloat(cursorX),
+                @intFromFloat(widget.pos[1]),
+                4.0,
+                fontSize,
+                rl.Color.init(0, 0, 0, 160),
+            );
         },
     }
 }
@@ -112,20 +128,20 @@ pub fn defaultAction(self: *@This(), event: Event) !void {
                 .charEvent => |character| {
                     // var buffer: [4]u8 = std.mem.zeroes([4]u8);
                     // const encoded = std.unicode.utf8Encode(character, &buffer) catch unreachable;
-                    // try payload.codepoints.insertSlice(payload.cursorPos, buffer[0..encoded]);
-                    try payload.codepoints.insert(payload.cursorPos, character);
-                    payload.cursorPos += 1;
+                    // try payload.codepoints.insertSlice(payload.cursorCol, buffer[0..encoded]);
+                    try payload.codepoints.insert(payload.cursorCol, character);
+                    payload.cursorCol += 1;
                 },
                 .keyEvent => |keyEvent| {
-                    if (keyEvent.code == .backspace and payload.cursorPos > 0) {
-                        payload.cursorPos -= 1;
-                        _ = payload.codepoints.orderedRemove(payload.cursorPos);
-                    } else if (keyEvent.code == .delete and payload.codepoints.items.len > payload.cursorPos) {
-                        _ = payload.codepoints.orderedRemove(payload.cursorPos);
-                    } else if (keyEvent.code == .left and payload.cursorPos > 0) {
-                        payload.cursorPos -= 1;
-                    } else if (keyEvent.code == .right and payload.cursorPos < payload.codepoints.items.len) {
-                        payload.cursorPos += 1;
+                    if (keyEvent.code == .backspace and payload.cursorCol > 0) {
+                        payload.cursorCol -= 1;
+                        _ = payload.codepoints.orderedRemove(payload.cursorCol);
+                    } else if (keyEvent.code == .delete and payload.codepoints.items.len > payload.cursorCol) {
+                        _ = payload.codepoints.orderedRemove(payload.cursorCol);
+                    } else if (keyEvent.code == .left and payload.cursorCol > 0) {
+                        payload.cursorCol -= 1;
+                    } else if (keyEvent.code == .right and payload.cursorCol < payload.codepoints.items.len) {
+                        payload.cursorCol += 1;
                     }
                 },
                 else => {},
@@ -140,6 +156,7 @@ pub fn defaultAction(self: *@This(), event: Event) !void {
 pub fn deinit(self: *@This()) void {
     switch (self.payload) {
         .text_input => |*payload| {
+            std.log.debug("codepoints deinit", .{});
             payload.codepoints.deinit();
         },
         else => {},
