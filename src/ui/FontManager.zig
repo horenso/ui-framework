@@ -5,13 +5,12 @@ const Key = i32;
 
 const CacheHashMap = std.AutoArrayHashMap(Key, rl.Font);
 
-const raw: []const u8 = " !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~" ++ "öüäÖÜÄßẞ";
-
 var charSet = blk: {
-    const n: usize = std.unicode.utf8CountCodepoints(raw) catch undefined;
+    const chars: []const u8 = " !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~" ++ "öüäÖÜÄßẞ";
+    const n: usize = std.unicode.utf8CountCodepoints(chars) catch undefined;
     var array = std.mem.zeroes([n]i32);
 
-    var viewer = std.unicode.Utf8View.initComptime(raw);
+    var viewer = std.unicode.Utf8View.initComptime(chars);
     var it = viewer.iterator();
 
     var index: usize = 0;
@@ -21,22 +20,6 @@ var charSet = blk: {
     }
     break :blk array;
 };
-
-// const charSet: []const i32 = toUnicodeSlice(raw);
-
-// fn toUnicodeSlice(comptime s: []const u8) []const i32 {
-//     var viewer = std.unicode.Utf8View.initComptime(s);
-//     var it = viewer.iterator();
-//     const n = std.unicode.utf8CountCodepoints(s) catch undefined;
-//     var array = std.mem.zeroes([n]i32);
-
-//     var index: usize = 0;
-//     while (it.nextCodepoint()) |cp| {
-//         array[index] = cp;
-//         index += 1;
-//     }
-//     return &array;
-// }
 
 cache: CacheHashMap,
 

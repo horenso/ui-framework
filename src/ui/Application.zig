@@ -39,7 +39,7 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
         .allocator = allocator,
         .inputQueue = std.ArrayList(Event).init(allocator),
         .fontManager = FontManager.init(allocator),
-        .fontSize = 20,
+        .fontSize = 60,
     };
     return app;
 }
@@ -116,6 +116,7 @@ fn pollKey(self: *@This()) !void {
         .backspace => .backspace,
         .delete => .delete,
         .space => .space,
+        .enter => .enter,
 
         .period => .period,
         .comma => .comma,
