@@ -1,7 +1,7 @@
 const std = @import("std");
 const rl = @import("raylib");
 
-const Widget = @import("Widget.zig");
+const Widget = @import("./widget/Widget.zig");
 
 const event = @import("event.zig");
 const Event = event.Event;
@@ -34,6 +34,7 @@ fontSize: i32,
 
 pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
     rl.initWindow(config.width, config.height, config.title);
+    rl.setMouseCursor(.ibeam);
     rl.setTargetFPS(60);
     const app = @This(){
         .allocator = allocator,

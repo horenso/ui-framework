@@ -1,120 +1,16 @@
 const std = @import("std");
 const rl = @import("raylib");
 
-const Application = @import("Application.zig");
-const Event = @import("event.zig").Event;
+const Application = @import("../Application.zig");
+const Event = @import("../event.zig").Event;
 
 const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
 
-const LinesType = std.DoublyLinkedList(std.ArrayList(u32));
-
 const drawDebug = true;
 
-const TextInputPayload = struct {
-    lines: LinesType, // TODO! lines.len is not correct!
-    lineCount: usize,
-    fontSize: i32,
-    currentLine: *LinesType.Node,
-    cursorRow: usize,
-    cursorCol: usize,
-    allocator: std.mem.Allocator, // TODO: do I need it?
-
-    pub fn loadFromFile(self: *TextInputPayload) void {
-        _ = self;
-    }
-
-    pub fn writeToFile(self: *TextInputPayload, path: []const u8) void {
-        _ = self;
-        _ = path;
-    }
-
-    pub fn onLeft(self: *TextInputPayload) void {
-        if (self.cursorCol > 0) {
-            self.cursorCol -= 1;
-        } else if (self.currentLine.prev) |prevLine| {
-            self.cursorRow -= 1;
-            self.currentLine = prevLine;
-            self.cursorCol = self.currentLine.data.items.len;
-        }
-    }
-
-    pub fn onRight(self: *TextInputPayload) void {
-        if (self.cursorCol < self.currentLine.data.items.len) {
-            self.cursorCol += 1;
-        } else if (self.currentLine.next) |nextLine| {
-            self.cursorRow += 1;
-            self.currentLine = nextLine;
-            self.cursorCol = 0;
-        }
-    }
-
-    pub fn onUp(self: *TextInputPayload) void {
-        if (self.currentLine.prev) |prevLine| {
-            self.cursorRow -= 1;
-            self.currentLine = prevLine;
-            self.cursorCol = @min(self.currentLine.data.items.len, self.cursorCol);
-        }
-    }
-
-    pub fn onDown(self: *TextInputPayload) void {
-        if (self.currentLine.next) |nextLine| {
-            self.cursorRow += 1;
-            self.currentLine = nextLine;
-            self.cursorCol = @min(self.currentLine.data.items.len, self.cursorCol);
-        }
-    }
-
-    pub fn onEnter(self: *TextInputPayload) !void {
-        const newLine = try self.allocator.create(LinesType.Node);
-        newLine.data = std.ArrayList(u32).init(self.allocator);
-        newLine.prev = self.currentLine;
-        newLine.next = self.currentLine.next;
-        self.currentLine.next = newLine;
-        self.currentLine = newLine;
-        self.cursorRow += 1;
-        self.cursorCol = 0;
-        self.lineCount += 1;
-    }
-
-    pub fn onBackspace(self: *TextInputPayload) void {
-        if (self.cursorCol > 0) {
-            self.cursorCol -= 1;
-            _ = self.currentLine.data.orderedRemove(self.cursorCol);
-        } else if (self.currentLine.prev) |prevLine| {
-            if (self.currentLine.next) |nextLine| {
-                prevLine.next = nextLine;
-                nextLine.prev = prevLine;
-            }
-            self.allocator.destroy(self.currentLine);
-            self.lineCount -= 1;
-            self.currentLine = prevLine;
-            self.cursorRow -= 1;
-            self.cursorCol = self.currentLine.data.items.len;
-        }
-    }
-
-    pub fn onDelete(self: *TextInputPayload) void {
-        if (self.cursorCol < self.currentLine.data.items.len) {
-            _ = self.currentLine.data.orderedRemove(self.cursorCol);
-        } // TODO: delete on empty line!
-    }
-
-    pub fn drawDebug(self: *const TextInputPayload, x: usize, y: usize) void {
-        rl.drawText(
-            rl.textFormat("Lines:%zu\nLength:%zu\nCursor: %d:%d", .{
-                self.lineCount,
-                self.currentLine.data.items.len,
-                self.cursorRow,
-                self.cursorCol,
-            }),
-            @intCast(x),
-            @intCast(y),
-            10,
-            rl.Color.black,
-        );
-    }
-};
+const TextInputPayload = @import("./TextInput.zig");
+const LinesType = TextInputPayload.LinesType;
 
 pub const WidgetPayload = union(enum) {
     button: struct { text: [:0]const u8, fontSize: i32 },
@@ -136,20 +32,10 @@ pub fn layout(widget: *const @This()) void {
 }
 
 pub fn TextInput(allocator: std.mem.Allocator, app: *Application) !@This() {
-    var lines = LinesType{};
-    var emptyLine: *LinesType.Node = try allocator.create(LinesType.Node);
-    emptyLine.data = std.ArrayList(u32).init(allocator);
-    lines.append(emptyLine);
     return @This(){
-        .payload = WidgetPayload{ .text_input = .{
-            .fontSize = 80,
-            .lines = lines,
-            .lineCount = 1,
-            .currentLine = lines.first.?,
-            .cursorRow = 0,
-            .cursorCol = 0,
-            .allocator = allocator,
-        } },
+        .payload = WidgetPayload{
+            .text_input = try TextInputPayload.init(allocator),
+        },
         .pos = .{ 10, 10 },
         .size = .{ 40, 40 },
         .app = app,
@@ -202,7 +88,7 @@ pub fn draw(widget: *const @This(), allocator: std.mem.Allocator) !void {
                 @intFromFloat(widget.pos[0]),
                 @intFromFloat(widget.pos[1]),
                 1000,
-                fontSize * @as(i32, @intCast(payload.lineCount)),
+                fontSize * @as(i32, @intCast(payload.lines.len)),
                 rl.Color.light_gray,
             );
             // text:

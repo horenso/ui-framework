@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Application = @import("ui/Application.zig");
-const Widget = @import("ui/Widget.zig");
+const Widget = @import("ui/widget/Widget.zig");
 
 pub fn main() anyerror!void {
     var alloc = std.heap.DebugAllocator(.{}){};
