@@ -7,7 +7,7 @@ const Event = @import("../event.zig").Event;
 const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
 
-const drawDebug = true;
+const drawDebug = false;
 
 const TextInputPayload = @import("./TextInput.zig");
 const LinesType = TextInputPayload.LinesType;

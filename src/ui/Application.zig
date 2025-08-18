@@ -33,6 +33,7 @@ fontManager: FontManager,
 fontSize: i32,
 
 pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
+    rl.setConfigFlags(.{ .window_resizable = true });
     rl.initWindow(config.width, config.height, config.title);
     rl.setMouseCursor(.ibeam);
     rl.setTargetFPS(60);
@@ -40,7 +41,7 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
         .allocator = allocator,
         .inputQueue = std.ArrayList(Event).init(allocator),
         .fontManager = FontManager.init(allocator),
-        .fontSize = 60,
+        .fontSize = 30,
     };
     return app;
 }

@@ -33,7 +33,7 @@ pub fn main() anyerror!void {
 
     var text_input = try Widget.TextInput(alloc.allocator(), &app);
     defer text_input.deinit();
-    const text = rl.loadFileText(@ptrCast("/home/jannisadamek/playground/ui-framework/build.zig"));
+    const text = rl.loadFileText(@ptrCast("./build.zig"));
     try text_input.payload.text_input.loadText(text[0..]);
 
     while (!app.shouldClose()) {

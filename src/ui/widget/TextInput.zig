@@ -4,7 +4,6 @@ const rl = @import("raylib");
 pub const LinesType = std.DoublyLinkedList(std.ArrayList(u32));
 
 lines: LinesType,
-fontSize: i32,
 currentLine: *LinesType.Node,
 cursorRow: usize,
 cursorCol: usize,
@@ -16,7 +15,6 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     emptyLine.data = std.ArrayList(u32).init(allocator);
     lines.append(emptyLine);
     return .{
-        .fontSize = 80,
         .lines = lines,
         .currentLine = emptyLine,
         .cursorRow = 0,
