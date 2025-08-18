@@ -32,7 +32,7 @@ pub fn deinit(self: *@This()) void {
 }
 
 pub fn getFont(self: *@This(), size: i32) !rl.Font {
-    const path = "res/VictorMonoAll/VictorMono-Medium.ttf";
+    const path = "res/VictorMonoAll/VictorMono-Medium.otf";
     if (self.cache.get(size)) |font| {
         return font;
     }

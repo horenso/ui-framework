@@ -3,12 +3,12 @@ const rl = @import("raylib");
 
 pub const LinesType = std.DoublyLinkedList(std.ArrayList(u32));
 
-lines: LinesType, // TODO! lines.len is not correct!
+lines: LinesType,
 fontSize: i32,
 currentLine: *LinesType.Node,
 cursorRow: usize,
 cursorCol: usize,
-allocator: std.mem.Allocator, // TODO: do I need it?
+allocator: std.mem.Allocator,
 
 pub fn init(allocator: std.mem.Allocator) !@This() {
     var lines = LinesType{};
@@ -25,13 +25,13 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     };
 }
 
-pub fn loadFromFile(self: *@This()) void {
-    _ = self;
-}
-
-pub fn writeToFile(self: *@This(), path: []const u8) void {
-    _ = self;
-    _ = path;
+pub fn deinit(self: *@This()) void {
+    var it = self.lines.first;
+    while (it) |currentLine| {
+        it = currentLine.next;
+        currentLine.data.deinit();
+        self.allocator.destroy(currentLine);
+    }
 }
 
 pub fn onLeft(self: *@This()) void {
@@ -73,28 +73,40 @@ pub fn onDown(self: *@This()) void {
 pub fn onEnter(self: *@This()) !void {
     const newLine = try self.allocator.create(LinesType.Node);
     newLine.data = std.ArrayList(u32).init(self.allocator);
+    try newLine.data.appendSlice(self.currentLine.data.items[self.cursorCol..]);
+    self.currentLine.data.shrinkAndFree(self.cursorCol);
     self.lines.insertAfter(self.currentLine, newLine);
     self.currentLine = newLine;
-    self.cursorRow += 1;
     self.cursorCol = 0;
+    self.cursorRow += 1;
 }
 
-pub fn onBackspace(self: *@This()) void {
+pub fn onBackspace(self: *@This()) !void {
     if (self.cursorCol > 0) {
         self.cursorCol -= 1;
         _ = self.currentLine.data.orderedRemove(self.cursorCol);
-    } else if (self.currentLine.prev != null) {
+    } else if (self.currentLine.prev) |prevLine| {
         self.lines.remove(self.currentLine);
-        self.allocator.destroy(self.currentLine);
+
+        self.cursorCol = prevLine.data.items.len;
         self.cursorRow -= 1;
-        self.cursorCol = self.currentLine.data.items.len;
+
+        try prevLine.data.appendSlice(self.currentLine.data.items[0..]);
+        self.currentLine.data.deinit();
+        self.allocator.destroy(self.currentLine);
+        self.currentLine = prevLine;
     }
 }
 
-pub fn onDelete(self: *@This()) void {
+pub fn onDelete(self: *@This()) !void {
     if (self.cursorCol < self.currentLine.data.items.len) {
         _ = self.currentLine.data.orderedRemove(self.cursorCol);
-    } // TODO: delete on empty line!
+    } else if (self.currentLine.next) |nextLine| {
+        try self.currentLine.data.appendSlice(nextLine.data.items[0..]);
+        self.lines.remove(nextLine);
+        nextLine.data.deinit();
+        self.allocator.destroy(nextLine);
+    }
 }
 
 pub fn drawDebug(self: *const @This(), x: usize, y: usize) void {

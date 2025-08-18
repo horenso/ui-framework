@@ -150,8 +150,8 @@ pub fn defaultAction(self: *@This(), event: Event) !void {
                         .down => payload.onDown(),
                         .up => payload.onUp(),
                         .enter => try payload.onEnter(),
-                        .backspace => payload.onBackspace(),
-                        .delete => payload.onDelete(),
+                        .backspace => try payload.onBackspace(),
+                        .delete => try payload.onDelete(),
                         else => {},
                     }
                 },
@@ -167,12 +167,7 @@ pub fn defaultAction(self: *@This(), event: Event) !void {
 pub fn deinit(self: *@This()) void {
     switch (self.payload) {
         .text_input => |*payload| {
-            std.log.debug("lines deinit", .{});
-            var it = payload.lines.first;
-            while (it) |node| {
-                node.data.deinit();
-                it = node.next;
-            }
+            payload.deinit();
         },
         else => {},
     }

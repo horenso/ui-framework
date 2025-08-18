@@ -3,6 +3,15 @@ const std = @import("std");
 const Application = @import("ui/Application.zig");
 const Widget = @import("ui/widget/Widget.zig");
 
+pub fn loadFromFile(self: *@This()) void {
+    _ = self;
+}
+
+pub fn writeToFile(self: *@This(), path: []const u8) void {
+    _ = self;
+    _ = path;
+}
+
 pub fn main() anyerror!void {
     var alloc = std.heap.DebugAllocator(.{}){};
     defer {
