@@ -26,11 +26,45 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
 }
 
 pub fn deinit(self: *@This()) void {
+    self.deinitLines();
+}
+
+inline fn deinitLines(self: *@This()) void {
     var it = self.lines.first;
     while (it) |currentLine| {
         it = currentLine.next;
+        self.lines.remove(currentLine);
         currentLine.data.deinit();
         self.allocator.destroy(currentLine);
+    }
+}
+
+fn makeNewLine(self: *@This()) !*LinesType.Node {
+    const newLine = try self.allocator.create(LinesType.Node);
+    newLine.data = std.ArrayList(u32).init(self.allocator);
+    return newLine;
+}
+
+pub fn loadText(self: *@This(), utf8Text: []const u8) !void {
+    self.deinitLines();
+
+    var lines_it = std.mem.splitSequence(u8, utf8Text, "\n");
+    while (lines_it.next()) |line| {
+        var newLine = try self.makeNewLine();
+        self.lines.append(newLine);
+
+        var viewer = try std.unicode.Utf8View.init(line);
+        var it = viewer.iterator();
+
+        while (it.nextCodepoint()) |cp| {
+            try newLine.data.append(@intCast(cp));
+        }
+    }
+    if (self.lines.first) |firstLine| {
+        self.currentLine = firstLine;
+    } else {
+        const newLine = try self.makeNewLine();
+        self.lines.append(newLine);
     }
 }
 

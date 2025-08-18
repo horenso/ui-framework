@@ -1,4 +1,5 @@
 const std = @import("std");
+const rl = @import("raylib");
 
 const Application = @import("ui/Application.zig");
 const Widget = @import("ui/widget/Widget.zig");
@@ -32,6 +33,8 @@ pub fn main() anyerror!void {
 
     var text_input = try Widget.TextInput(alloc.allocator(), &app);
     defer text_input.deinit();
+    const text = rl.loadFileText(@ptrCast("/home/jannisadamek/playground/ui-framework/build.zig"));
+    try text_input.payload.text_input.loadText(text[0..]);
 
     while (!app.shouldClose()) {
         app.keyboardInputMode = .Character;
