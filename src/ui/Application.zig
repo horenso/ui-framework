@@ -2,6 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 
 const Widget = @import("./widget/Widget.zig");
+const Vec2 = Widget.Vec2;
 
 const event = @import("event.zig");
 const Event = event.Event;
@@ -30,7 +31,6 @@ inputQueue: std.ArrayList(Event),
 allocator: std.mem.Allocator,
 
 fontManager: FontManager,
-fontSize: i32,
 
 pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
     rl.setConfigFlags(.{ .window_resizable = true });
@@ -41,7 +41,6 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
         .allocator = allocator,
         .inputQueue = std.ArrayList(Event).init(allocator),
         .fontManager = FontManager.init(allocator),
-        .fontSize = 30,
     };
     return app;
 }
@@ -52,14 +51,16 @@ pub fn deinit(self: *@This()) void {
     rl.closeWindow();
 }
 
-pub fn draw(self: *@This(), parentWidget: *const Widget, allocator: std.mem.Allocator) !void {
+pub fn draw(self: *@This(), parentWidget: *const Widget) !void {
     _ = self;
 
     rl.beginDrawing();
     defer rl.endDrawing();
 
     rl.clearBackground(rl.Color.white);
-    try parentWidget.draw(allocator);
+    const width: f32 = @floatFromInt(rl.getScreenHeight());
+    const height: f32 = @floatFromInt(rl.getScreenWidth());
+    try parentWidget.draw(Vec2{ 0, 0 }, Vec2{ width, height }, Vec2{ 0, 0 });
 }
 
 pub fn shouldClose(self: *@This()) bool {

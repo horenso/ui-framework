@@ -3,6 +3,7 @@ const rl = @import("raylib");
 
 const Application = @import("ui/Application.zig");
 const Widget = @import("ui/widget/Widget.zig");
+const TextInput = @import("ui/widget/TextInput.zig");
 
 pub fn loadFromFile(self: *@This()) void {
     _ = self;
@@ -14,9 +15,10 @@ pub fn writeToFile(self: *@This(), path: []const u8) void {
 }
 
 pub fn main() anyerror!void {
-    var alloc = std.heap.DebugAllocator(.{}){};
+    var debugAllocator = std.heap.DebugAllocator(.{}){};
+    const allocator = debugAllocator.allocator();
     defer {
-        const result = alloc.deinit();
+        const result = debugAllocator.deinit();
         if (result == .ok) {
             std.log.debug("alloc.deinit() => ok", .{});
         } else {
@@ -27,27 +29,29 @@ pub fn main() anyerror!void {
     var app = try Application.init(.{
         .width = 800,
         .height = 600,
-        .title = "Hello, world!",
-    }, alloc.allocator());
+        .title = "Text Editor",
+    }, allocator);
     defer app.deinit();
 
-    var text_input = try Widget.TextInput(alloc.allocator(), &app);
-    defer text_input.deinit();
+    var textInput = try TextInput.init(allocator);
+    var textInputWidget = textInput.widget(&app);
+    defer textInputWidget.deinit();
+
     const text = rl.loadFileText(@ptrCast("./build.zig"));
-    try text_input.payload.text_input.loadText(text[0..]);
+    try textInput.loadText(text[0..]);
 
     while (!app.shouldClose()) {
         app.keyboardInputMode = .Character;
-        try app.draw(&text_input, alloc.allocator());
+        try app.draw(&textInputWidget);
         try app.pollEvents();
         while (app.inputQueue.pop()) |event| {
             std.log.debug("Event {?}", .{event});
-            if (event == .keyEvent and event.keyEvent.code == .num1) {
-                app.fontSize += 4;
-            } else if (event == .keyEvent and event.keyEvent.code == .num2) {
-                app.fontSize = @max(app.fontSize - 4, 0);
+            if (event == .keyEvent and event.keyEvent.ctrl and event.keyEvent.code == .num1) {
+                textInput.fontSize += 4;
+            } else if (event == .keyEvent and event.keyEvent.ctrl and event.keyEvent.code == .num2) {
+                textInput.fontSize = @max(textInput.fontSize - 4, 0);
             }
-            try text_input.defaultAction(event);
+            try textInputWidget.handleEvent(event);
         }
     }
 }

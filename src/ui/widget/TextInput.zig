@@ -1,8 +1,18 @@
 const std = @import("std");
 const rl = @import("raylib");
 
+const Application = @import("../Application.zig");
+const Event = @import("../event.zig").Event;
+const Widget = @import("./Widget.zig");
+
+const Vec2 = @Vector(2, f32);
+const Vec4 = @Vector(4, f32);
+
+const FONT_SPACING = 2.0;
+
 pub const LinesType = std.DoublyLinkedList(std.ArrayList(u32));
 
+fontSize: i32,
 lines: LinesType,
 currentLine: *LinesType.Node,
 cursorRow: usize,
@@ -15,6 +25,7 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     emptyLine.data = std.ArrayList(u32).init(allocator);
     lines.append(emptyLine);
     return .{
+        .fontSize = 30,
         .lines = lines,
         .currentLine = emptyLine,
         .cursorRow = 0,
@@ -23,8 +34,16 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     };
 }
 
-pub fn deinit(self: *@This()) void {
-    self.deinitLines();
+pub fn widget(self: *@This(), app: *Application) Widget {
+    return .{
+        .app = app,
+        .ptr = self,
+        .vtable = &.{
+            .deinit = deinit,
+            .draw = draw,
+            .handleEvent = handleEvent,
+        },
+    };
 }
 
 inline fn deinitLines(self: *@This()) void {
@@ -66,7 +85,7 @@ pub fn loadText(self: *@This(), utf8Text: []const u8) !void {
     }
 }
 
-pub fn onLeft(self: *@This()) void {
+fn onLeft(self: *@This()) void {
     if (self.cursorCol > 0) {
         self.cursorCol -= 1;
     } else if (self.currentLine.prev) |prevLine| {
@@ -76,7 +95,7 @@ pub fn onLeft(self: *@This()) void {
     }
 }
 
-pub fn onRight(self: *@This()) void {
+fn onRight(self: *@This()) void {
     if (self.cursorCol < self.currentLine.data.items.len) {
         self.cursorCol += 1;
     } else if (self.currentLine.next) |nextLine| {
@@ -86,7 +105,7 @@ pub fn onRight(self: *@This()) void {
     }
 }
 
-pub fn onUp(self: *@This()) void {
+fn onUp(self: *@This()) void {
     if (self.currentLine.prev) |prevLine| {
         self.cursorRow -= 1;
         self.currentLine = prevLine;
@@ -94,7 +113,7 @@ pub fn onUp(self: *@This()) void {
     }
 }
 
-pub fn onDown(self: *@This()) void {
+fn onDown(self: *@This()) void {
     if (self.currentLine.next) |nextLine| {
         self.cursorRow += 1;
         self.currentLine = nextLine;
@@ -102,7 +121,7 @@ pub fn onDown(self: *@This()) void {
     }
 }
 
-pub fn onEnter(self: *@This()) !void {
+fn onEnter(self: *@This()) !void {
     const newLine = try self.allocator.create(LinesType.Node);
     newLine.data = std.ArrayList(u32).init(self.allocator);
     try newLine.data.appendSlice(self.currentLine.data.items[self.cursorCol..]);
@@ -113,7 +132,7 @@ pub fn onEnter(self: *@This()) !void {
     self.cursorRow += 1;
 }
 
-pub fn onBackspace(self: *@This()) !void {
+fn onBackspace(self: *@This()) !void {
     if (self.cursorCol > 0) {
         self.cursorCol -= 1;
         _ = self.currentLine.data.orderedRemove(self.cursorCol);
@@ -130,7 +149,7 @@ pub fn onBackspace(self: *@This()) !void {
     }
 }
 
-pub fn onDelete(self: *@This()) !void {
+fn onDelete(self: *@This()) !void {
     if (self.cursorCol < self.currentLine.data.items.len) {
         _ = self.currentLine.data.orderedRemove(self.cursorCol);
     } else if (self.currentLine.next) |nextLine| {
@@ -141,17 +160,72 @@ pub fn onDelete(self: *@This()) !void {
     }
 }
 
-pub fn drawDebug(self: *const @This(), x: usize, y: usize) void {
-    rl.drawText(
-        rl.textFormat("Lines:%zu\nLength:%zu\nCursor: %d:%d", .{
-            self.lines.len,
-            self.currentLine.data.items.len,
-            self.cursorRow,
-            self.cursorCol,
-        }),
-        @intCast(x),
-        @intCast(y),
-        10,
-        rl.Color.black,
+pub fn deinit(opaquePtr: *anyopaque) void {
+    const self: *@This() = @ptrCast(@alignCast(opaquePtr));
+    self.deinitLines();
+}
+
+pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !void {
+    const self: *@This() = @ptrCast(@alignCast(opaquePtr));
+    switch (event) {
+        .charEvent => |character| {
+            // var buffer: [4]u8 = std.mem.zeroes([4]u8);
+            // const encoded = std.unicode.utf8Encode(character, &buffer) catch unreachable;
+            // try self.codepoints.insertSlice(self.cursorCol, buffer[0..encoded]);
+            try self.currentLine.data.insert(self.cursorCol, character);
+            self.cursorCol += 1;
+        },
+        .keyEvent => |keyEvent| {
+            switch (keyEvent.code) {
+                .left => self.onLeft(),
+                .right => self.onRight(),
+                .down => self.onDown(),
+                .up => self.onUp(),
+                .enter => try self.onEnter(),
+                .backspace => try self.onBackspace(),
+                .delete => try self.onDelete(),
+                else => {},
+            }
+        },
+        else => {},
+    }
+}
+
+pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2, size: Vec2, offset: Vec2) !void {
+    const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
+    _ = size;
+    _ = offset;
+    // text:
+    const font = try app.fontManager.getFont(@intCast(self.fontSize));
+    const fontSizeFloat: f32 = @floatFromInt(self.fontSize);
+    const spacing: comptime_float = 1.0;
+    const fontWidth = rl.measureTextEx(font, "A", fontSizeFloat, spacing).x;
+
+    var currentNode = self.lines.first;
+    var index: usize = 0;
+    while (currentNode) |node| {
+        const indexFloat: f32 = @floatFromInt(index);
+        const y: f32 = position[1] + indexFloat * fontSizeFloat;
+        rl.drawTextCodepoints(
+            font,
+            @ptrCast(node.data.items),
+            rl.Vector2{ .x = position[0], .y = y },
+            fontSizeFloat,
+            spacing,
+            rl.Color.red,
+        );
+        currentNode = node.next;
+        index += 1;
+    }
+
+    // draw cursor:
+    const cursorX: f32 = position[0] + (fontWidth + spacing) * @as(f32, @floatFromInt(self.cursorCol));
+    const cursorY: f32 = position[1] + fontSizeFloat * @as(f32, @floatFromInt(self.cursorRow));
+    rl.drawRectangle(
+        @intFromFloat(cursorX),
+        @intFromFloat(cursorY),
+        4.0,
+        self.fontSize,
+        rl.Color.init(0, 0, 0, 160),
     );
 }
