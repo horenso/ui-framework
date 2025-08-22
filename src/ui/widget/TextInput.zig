@@ -5,8 +5,10 @@ const Application = @import("../Application.zig");
 const Event = @import("../event.zig").Event;
 const Widget = @import("./Widget.zig");
 
-const Vec2 = @Vector(2, f32);
-const Vec4 = @Vector(4, f32);
+const vec = @import("../vec.zig");
+const Vec2f = vec.Vec2f;
+const Vec4f = vec.Vec4f;
+const Vec2i = vec.Vec2i;
 
 const FONT_SPACING = 2.0;
 
@@ -165,7 +167,7 @@ pub fn deinit(opaquePtr: *anyopaque) void {
     self.deinitLines();
 }
 
-pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !void {
+pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event) !bool {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     switch (event) {
         .charEvent => |character| {
@@ -174,6 +176,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !void {
             // try self.codepoints.insertSlice(self.cursorCol, buffer[0..encoded]);
             try self.currentLine.data.insert(self.cursorCol, character);
             self.cursorCol += 1;
+            return true;
         },
         .keyEvent => |keyEvent| {
             switch (keyEvent.code) {
@@ -184,14 +187,39 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !void {
                 .enter => try self.onEnter(),
                 .backspace => try self.onBackspace(),
                 .delete => try self.onDelete(),
-                else => {},
+                else => return false,
             }
+            return true;
         },
-        else => {},
+        .clickEvent => |clickEvent| {
+            const font = try app.fontManager.getFont(@intCast(self.fontSize));
+            const fontSizeFloat: f32 = @floatFromInt(self.fontSize);
+            const spacing: comptime_float = FONT_SPACING;
+            const fontWidth = rl.measureTextEx(font, "A", fontSizeFloat, spacing).x;
+
+            self.cursorRow = @as(usize, @intCast(clickEvent.y)) / @as(usize, @intCast(self.fontSize));
+            self.cursorCol = @as(usize, @intCast(clickEvent.y)) / @as(usize, @intFromFloat(fontWidth + spacing));
+
+            var currentNode = self.lines.first;
+            var index: usize = 0;
+            while (currentNode) |node| {
+                if (index == self.cursorRow) {
+                    self.currentLine = node;
+                    break;
+                }
+                currentNode = node.next;
+                index += 1;
+            }
+            self.cursorCol = @min(self.cursorCol, self.currentLine.data.items.len);
+            return true;
+        },
+        else => return false,
     }
 }
 
-pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2, size: Vec2, offset: Vec2) !void {
+pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, size: Vec2f, offset: Vec2i) !void {
+    rl.clearBackground(rl.Color.white);
+
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
     _ = size;
     _ = offset;

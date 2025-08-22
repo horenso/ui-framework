@@ -1,13 +1,16 @@
 const std = @import("std");
 const rl = @import("raylib");
 
+const FontManager = @import("FontManager.zig");
 const Widget = @import("./widget/Widget.zig");
-const Vec2 = Widget.Vec2;
 
 const event = @import("event.zig");
 const Event = event.Event;
 const KeyCode = event.KeyCode;
-const FontManager = @import("FontManager.zig");
+
+const vec = @import("vec.zig");
+const Vec2f = vec.Vec2f;
+const Vec4f = vec.Vec4f;
 
 const Config = struct {
     width: comptime_int,
@@ -51,16 +54,16 @@ pub fn deinit(self: *@This()) void {
     rl.closeWindow();
 }
 
-pub fn draw(self: *@This(), parentWidget: *const Widget) !void {
+pub fn draw(self: *@This(), topWidget: Widget) !void {
     _ = self;
 
     rl.beginDrawing();
     defer rl.endDrawing();
 
-    rl.clearBackground(rl.Color.white);
-    const width: f32 = @floatFromInt(rl.getScreenHeight());
-    const height: f32 = @floatFromInt(rl.getScreenWidth());
-    try parentWidget.draw(Vec2{ 0, 0 }, Vec2{ width, height }, Vec2{ 0, 0 });
+    const width: f32 = @floatFromInt(rl.getScreenWidth());
+    const height: f32 = @floatFromInt(rl.getScreenHeight());
+    rl.clearBackground(rl.Color.sky_blue);
+    try topWidget.draw(Vec2f{ 0, 0 }, Vec2f{ width, height }, Vec2f{ 0, 0 });
 }
 
 pub fn shouldClose(self: *@This()) bool {
@@ -138,6 +141,33 @@ pub fn pollEvents(self: *@This()) !void {
     }
     if (self.inputState.leftMouseDown and rl.isMouseButtonUp(rl.MouseButton.left)) {
         self.inputState.leftMouseDown = false;
+    }
+    const mouseWheelMove = rl.getMouseWheelMoveV();
+    if (mouseWheelMove.x != 0.0 or mouseWheelMove.y != 0.0) {
+        try self.inputQueue.append(.{ .mouseWheelEvent = .{
+            mouseWheelMove.x,
+            mouseWheelMove.y,
+        } });
+    }
+
+    if (rl.isMouseButtonPressed(.left)) {
+        try self.inputQueue.append(.{ .clickEvent = .{
+            .x = @intCast(rl.getMouseX()),
+            .y = @intCast(rl.getMouseY()),
+            .button = .left,
+        } });
+    } else if (rl.isMouseButtonPressed(.middle)) {
+        try self.inputQueue.append(.{ .clickEvent = .{
+            .x = @intCast(rl.getMouseX()),
+            .y = @intCast(rl.getMouseY()),
+            .button = .middle,
+        } });
+    } else if (rl.isMouseButtonPressed(.right)) {
+        try self.inputQueue.append(.{ .clickEvent = .{
+            .x = @intCast(rl.getMouseX()),
+            .y = @intCast(rl.getMouseY()),
+            .button = .right,
+        } });
     }
 
     // keyboard:

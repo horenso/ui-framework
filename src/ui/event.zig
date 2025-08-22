@@ -1,3 +1,6 @@
+const vec = @import("vec.zig");
+const Vec2f = vec.Vec2f;
+
 pub const KeyCode = enum {
     // zig fmt: off
     a, b, c, d, e, f, g, h, i, j, k, l, m, 
@@ -18,11 +21,13 @@ pub const KeyEvent = struct {
     shift: bool,
 };
 pub const ClickEvent = struct {
-    x: u16,
-    y: u16,
-    leftMouseButton: bool,
-    middleMouseButton: bool,
-    rightMouseButton: bool,
+    x: u32,
+    y: u32,
+    button: enum {
+        left,
+        middle,
+        right,
+    },
 };
 // Unicode character
 pub const CharEvent = u32;
@@ -31,6 +36,7 @@ pub const Event = union(enum) {
     mouseEnterEvent: void,
     mouseLeaveEvent: void,
     clickEvent: ClickEvent,
+    mouseWheelEvent: Vec2f,
     keyEvent: KeyEvent,
     charEvent: CharEvent,
 };

@@ -1,9 +1,12 @@
-const Event = @import("../event.zig").Event;
-
-pub const Vec2 = @Vector(2, f32);
-pub const Vec4 = @Vector(4, f32);
+const rl = @import("raylib");
 
 const Application = @import("../Application.zig");
+const Event = @import("../event.zig").Event;
+
+const vec = @import("../vec.zig");
+const Vec2f = vec.Vec2f;
+const Vec4f = vec.Vec4f;
+const Vec2i = vec.Vec2i;
 
 ptr: *anyopaque,
 vtable: *const VTable,
@@ -12,18 +15,38 @@ app: *Application,
 
 pub const VTable = struct {
     deinit: *const fn (*anyopaque) void,
-    draw: *const fn (*const anyopaque, app: *Application, position: Vec2, size: Vec2, offset: Vec2) anyerror!void,
-    handleEvent: *const fn (*anyopaque, event: Event) anyerror!void,
+    draw: *const fn (*const anyopaque, app: *Application, position: Vec2f, size: Vec2f, offset: Vec2i) anyerror!void,
+    /// Returns true if the event was handled, false otherwise.
+    handleEvent: *const fn (*anyopaque, app: *Application, event: Event) anyerror!bool,
 };
 
 pub fn deinit(self: @This()) void {
     self.vtable.deinit(self.ptr);
 }
 
-pub fn draw(self: @This(), position: Vec2, size: Vec2, offset: Vec2) anyerror!void {
-    return self.vtable.draw(self.ptr, self.app, position, size, offset);
+pub fn draw(self: @This(), position: Vec2f, size: Vec2f, offset: Vec2i) anyerror!void {
+    rl.beginScissorMode(
+        @intFromFloat(position[0]),
+        @intFromFloat(position[1]),
+        @intFromFloat(size[0]),
+        @intFromFloat(size[1]),
+    );
+    defer rl.endScissorMode();
+    if (offset[0] != 0 or offset[1] != 0) {
+        const camera = rl.Camera2D{
+            .offset = .{ .x = @floatFromInt(offset[0]), .y = @floatFromInt(offset[1]) },
+            .target = .{ .x = 0, .y = 0 },
+            .rotation = 0.0,
+            .zoom = 1.0,
+        };
+        camera.begin();
+        defer camera.end();
+        return self.vtable.draw(self.ptr, self.app, position, size, offset);
+    } else {
+        return self.vtable.draw(self.ptr, self.app, position, size, Vec2f{ 0, 0 });
+    }
 }
 
-pub fn handleEvent(self: @This(), event: Event) anyerror!void {
-    return self.vtable.handleEvent(self.ptr, event);
+pub fn handleEvent(self: @This(), event: Event) anyerror!bool {
+    return self.vtable.handleEvent(self.ptr, self.app, event);
 }
