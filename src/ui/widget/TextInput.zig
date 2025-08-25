@@ -12,21 +12,24 @@ const Vec2i = vec.Vec2i;
 
 const FONT_SPACING = 2;
 
-pub const LinesType = std.DoublyLinkedList(std.ArrayList(u32));
+const LineData = struct {
+    node: std.DoublyLinkedList.Node,
+    data: std.ArrayList(u32),
+};
 
 fontSize: i32,
-lines: LinesType,
-currentLine: *LinesType.Node,
+lines: std.DoublyLinkedList = .{},
+currentLine: *LineData,
 maxLineLength: usize,
 cursorRow: usize,
 cursorCol: usize,
 allocator: std.mem.Allocator,
 
 pub fn init(allocator: std.mem.Allocator) !@This() {
-    var lines = LinesType{};
-    var emptyLine: *LinesType.Node = try allocator.create(LinesType.Node);
-    emptyLine.data = std.ArrayList(u32).init(allocator);
-    lines.append(emptyLine);
+    var lines: std.DoublyLinkedList = .{};
+    var emptyLine: *LineData = try allocator.create(LineData);
+    emptyLine.data = .empty;
+    lines.append(&emptyLine.node);
     return .{
         .fontSize = 30,
         .lines = lines,
@@ -53,49 +56,50 @@ pub fn widget(self: *@This(), app: *Application) Widget {
 
 inline fn deinitLines(self: *@This()) void {
     var it = self.lines.first;
-    while (it) |currentLine| {
-        it = currentLine.next;
-        self.lines.remove(currentLine);
-        currentLine.data.deinit();
-        self.allocator.destroy(currentLine);
+    while (it) |currentNode| {
+        const line: *LineData = @fieldParentPtr("node", currentNode);
+        it = currentNode.next;
+        self.lines.remove(currentNode);
+        line.data.deinit(self.allocator);
+        self.allocator.destroy(line);
     }
 }
 
-fn makeNewLine(self: *@This()) !*LinesType.Node {
-    const newLine = try self.allocator.create(LinesType.Node);
-    newLine.data = std.ArrayList(u32).init(self.allocator);
+fn makeNewLine(self: *@This()) !*LineData {
+    const newLine = try self.allocator.create(LineData);
+    newLine.data = std.ArrayList(u32).empty;
     return newLine;
 }
 
-pub fn loadText(self: *@This(), utf8Text: []const u8) !void {
+pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const u8) !void {
     self.deinitLines();
 
     var lines_it = std.mem.splitSequence(u8, utf8Text, "\n");
     while (lines_it.next()) |line| {
         var newLine = try self.makeNewLine();
-        self.lines.append(newLine);
+        self.lines.append(&newLine.node);
 
         var viewer = try std.unicode.Utf8View.init(line);
         var it = viewer.iterator();
 
         while (it.nextCodepoint()) |cp| {
-            try newLine.data.append(@intCast(cp));
+            try newLine.data.append(allocator, @intCast(cp));
         }
     }
     if (self.lines.first) |firstLine| {
-        self.currentLine = firstLine;
+        self.currentLine = @fieldParentPtr("node", firstLine);
     } else {
         const newLine = try self.makeNewLine();
-        self.lines.append(newLine);
+        self.lines.append(&newLine.node);
     }
 }
 
 fn onLeft(self: *@This()) void {
     if (self.cursorCol > 0) {
         self.cursorCol -= 1;
-    } else if (self.currentLine.prev) |prevLine| {
+    } else if (self.currentLine.node.prev) |prevLine| {
         self.cursorRow -= 1;
-        self.currentLine = prevLine;
+        self.currentLine = @fieldParentPtr("node", prevLine);
         self.cursorCol = self.currentLine.data.items.len;
     }
 }
@@ -103,35 +107,35 @@ fn onLeft(self: *@This()) void {
 fn onRight(self: *@This()) void {
     if (self.cursorCol < self.currentLine.data.items.len) {
         self.cursorCol += 1;
-    } else if (self.currentLine.next) |nextLine| {
+    } else if (self.currentLine.node.next) |nextLine| {
         self.cursorRow += 1;
-        self.currentLine = nextLine;
+        self.currentLine = @fieldParentPtr("node", nextLine);
         self.cursorCol = 0;
     }
 }
 
 fn onUp(self: *@This()) void {
-    if (self.currentLine.prev) |prevLine| {
+    if (self.currentLine.node.prev) |prevLine| {
         self.cursorRow -= 1;
-        self.currentLine = prevLine;
+        self.currentLine = @fieldParentPtr("node", prevLine);
         self.cursorCol = @min(self.currentLine.data.items.len, self.cursorCol);
     }
 }
 
 fn onDown(self: *@This()) void {
-    if (self.currentLine.next) |nextLine| {
+    if (self.currentLine.node.next) |nextLine| {
         self.cursorRow += 1;
-        self.currentLine = nextLine;
+        self.currentLine = @fieldParentPtr("node", nextLine);
         self.cursorCol = @min(self.currentLine.data.items.len, self.cursorCol);
     }
 }
 
 fn onEnter(self: *@This()) !void {
-    const newLine = try self.allocator.create(LinesType.Node);
-    newLine.data = std.ArrayList(u32).init(self.allocator);
-    try newLine.data.appendSlice(self.currentLine.data.items[self.cursorCol..]);
-    self.currentLine.data.shrinkAndFree(self.cursorCol);
-    self.lines.insertAfter(self.currentLine, newLine);
+    const newLine = try self.allocator.create(LineData);
+    newLine.data = std.ArrayList(u32).empty;
+    try newLine.data.appendSlice(self.allocator, self.currentLine.data.items[self.cursorCol..]);
+    self.currentLine.data.shrinkAndFree(self.allocator, self.cursorCol);
+    self.lines.insertAfter(&self.currentLine.node, &newLine.node);
     self.currentLine = newLine;
     self.cursorCol = 0;
     self.cursorRow += 1;
@@ -141,26 +145,28 @@ fn onBackspace(self: *@This()) !void {
     if (self.cursorCol > 0) {
         self.cursorCol -= 1;
         _ = self.currentLine.data.orderedRemove(self.cursorCol);
-    } else if (self.currentLine.prev) |prevLine| {
-        self.lines.remove(self.currentLine);
+    } else if (self.currentLine.node.prev) |prevLine| {
+        self.lines.remove(&self.currentLine.node);
 
-        self.cursorCol = prevLine.data.items.len;
+        const line: *LineData = @fieldParentPtr("node", prevLine);
+        self.cursorCol = line.data.items.len;
         self.cursorRow -= 1;
 
-        try prevLine.data.appendSlice(self.currentLine.data.items[0..]);
-        self.currentLine.data.deinit();
+        try line.data.appendSlice(self.allocator, self.currentLine.data.items[0..]);
+        self.currentLine.data.deinit(self.allocator);
         self.allocator.destroy(self.currentLine);
-        self.currentLine = prevLine;
+        self.currentLine = line;
     }
 }
 
 fn onDelete(self: *@This()) !void {
     if (self.cursorCol < self.currentLine.data.items.len) {
         _ = self.currentLine.data.orderedRemove(self.cursorCol);
-    } else if (self.currentLine.next) |nextLine| {
-        try self.currentLine.data.appendSlice(nextLine.data.items[0..]);
+    } else if (self.currentLine.node.next) |nextLine| {
+        const line: *LineData = @fieldParentPtr("node", nextLine);
+        try self.currentLine.data.appendSlice(self.allocator, line.data.items[0..]);
         self.lines.remove(nextLine);
-        nextLine.data.deinit();
+        line.data.deinit(self.allocator);
         self.allocator.destroy(nextLine);
     }
 }
@@ -177,7 +183,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event) !bool
             // var buffer: [4]u8 = std.mem.zeroes([4]u8);
             // const encoded = std.unicode.utf8Encode(character, &buffer) catch unreachable;
             // try self.codepoints.insertSlice(self.cursorCol, buffer[0..encoded]);
-            try self.currentLine.data.insert(self.cursorCol, character);
+            try self.currentLine.data.insert(app.allocator, self.cursorCol, character);
             self.maxLineLength = @max(self.maxLineLength, self.currentLine.data.items.len);
             self.cursorCol += 1;
             return true;
@@ -207,7 +213,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event) !bool
             var index: usize = 0;
             while (currentNode) |node| {
                 if (index == self.cursorRow) {
-                    self.currentLine = node;
+                    self.currentLine = @fieldParentPtr("node", node);
                     break;
                 }
                 currentNode = node.next;
@@ -222,7 +228,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event) !bool
 
 pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
-    const lineCount = self.lines.len;
+    const lineCount = self.lines.len();
     const fontSizeFloat: f32 = @floatFromInt(self.fontSize);
     return Vec2f{
         @as(f32, @floatFromInt(self.maxLineLength)) * fontSizeFloat + FONT_SPACING,
@@ -241,20 +247,21 @@ pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, siz
     const fontSizeFloat: f32 = @floatFromInt(self.fontSize);
     const fontWidth = rl.measureTextEx(font, "A", fontSizeFloat, FONT_SPACING).x;
 
-    var currentNode = self.lines.first;
+    var it = self.lines.first;
     var index: usize = 0;
-    while (currentNode) |node| {
+    while (it) |currentNode| {
+        const lineData: *LineData = @fieldParentPtr("node", currentNode);
         const indexFloat: f32 = @floatFromInt(index);
         const y: f32 = position[1] + indexFloat * fontSizeFloat;
         rl.drawTextCodepoints(
             font,
-            @ptrCast(node.data.items),
+            @ptrCast(lineData.data.items),
             rl.Vector2{ .x = position[0], .y = y },
             fontSizeFloat,
             FONT_SPACING,
             rl.Color.red,
         );
-        currentNode = node.next;
+        it = currentNode.next;
         index += 1;
     }
 

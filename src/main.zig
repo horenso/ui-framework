@@ -23,7 +23,7 @@ pub fn main() anyerror!void {
         .height = 600,
         .title = "Text Editor",
     }, allocator);
-    defer app.deinit();
+    defer app.deinit(allocator);
 
     var textInput = try TextInput.init(allocator);
     var textInputWidget = textInput.widget(&app);
@@ -34,14 +34,14 @@ pub fn main() anyerror!void {
     defer scrollableWidget.deinit();
 
     const text = rl.loadFileText(@ptrCast("./build.zig"));
-    try textInput.loadText(text[0..]);
+    try textInput.loadText(allocator, text[0..]);
 
     while (!app.shouldClose()) {
         app.keyboardInputMode = .Character;
         try app.draw(scrollableWidget);
         try app.pollEvents();
         while (app.inputQueue.pop()) |event| {
-            std.log.debug("Event {?}", .{event});
+            std.log.debug("Event {any}", .{event});
             if (event == .keyEvent and event.keyEvent.ctrl and event.keyEvent.code == .num1) {
                 textInput.fontSize += 4;
             } else if (event == .keyEvent and event.keyEvent.ctrl and event.keyEvent.code == .num2) {

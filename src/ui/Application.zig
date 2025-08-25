@@ -42,14 +42,14 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
     rl.setTargetFPS(60);
     const app = @This(){
         .allocator = allocator,
-        .inputQueue = std.ArrayList(Event).init(allocator),
+        .inputQueue = .empty,
         .fontManager = FontManager.init(allocator),
     };
     return app;
 }
 
-pub fn deinit(self: *@This()) void {
-    self.inputQueue.deinit();
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+    self.inputQueue.deinit(allocator);
     self.fontManager.deinit();
     rl.closeWindow();
 }
@@ -128,7 +128,7 @@ fn pollKey(self: *@This()) !void {
         .comma => .comma,
         else => return,
     };
-    try self.inputQueue.append(Event{ .keyEvent = .{
+    try self.inputQueue.append(self.allocator, .{ .keyEvent = .{
         .code = keycode,
         .ctrl = rl.isKeyDown(rl.KeyboardKey.left_control) or rl.isKeyDown(rl.KeyboardKey.right_control),
         .shift = rl.isKeyDown(rl.KeyboardKey.left_shift) or rl.isKeyDown(rl.KeyboardKey.right_shift),
@@ -144,26 +144,26 @@ pub fn pollEvents(self: *@This()) !void {
     }
     const mouseWheelMove = rl.getMouseWheelMoveV();
     if (mouseWheelMove.x != 0.0 or mouseWheelMove.y != 0.0) {
-        try self.inputQueue.append(.{ .mouseWheelEvent = .{
+        try self.inputQueue.append(self.allocator, .{ .mouseWheelEvent = .{
             mouseWheelMove.x,
             mouseWheelMove.y,
         } });
     }
 
     if (rl.isMouseButtonPressed(.left)) {
-        try self.inputQueue.append(.{ .clickEvent = .{
+        try self.inputQueue.append(self.allocator, .{ .clickEvent = .{
             .x = @intCast(rl.getMouseX()),
             .y = @intCast(rl.getMouseY()),
             .button = .left,
         } });
     } else if (rl.isMouseButtonPressed(.middle)) {
-        try self.inputQueue.append(.{ .clickEvent = .{
+        try self.inputQueue.append(self.allocator, .{ .clickEvent = .{
             .x = @intCast(rl.getMouseX()),
             .y = @intCast(rl.getMouseY()),
             .button = .middle,
         } });
     } else if (rl.isMouseButtonPressed(.right)) {
-        try self.inputQueue.append(.{ .clickEvent = .{
+        try self.inputQueue.append(self.allocator, .{ .clickEvent = .{
             .x = @intCast(rl.getMouseX()),
             .y = @intCast(rl.getMouseY()),
             .button = .right,
@@ -175,7 +175,7 @@ pub fn pollEvents(self: *@This()) !void {
         const charPressed: u32 = @intCast(rl.getCharPressed());
         if (charPressed != 0) {
             _ = rl.getKeyPressed();
-            try self.inputQueue.append(Event{ .charEvent = charPressed });
+            try self.inputQueue.append(self.allocator, .{ .charEvent = charPressed });
         } else {
             try pollKey(self);
             // const charScalar: u21 = @truncate(charPressed);
