@@ -39,14 +39,14 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
     rl.setTargetFPS(60);
     const app = @This(){
         .allocator = allocator,
-        .inputQueue = std.ArrayList(Event).init(allocator),
+        .inputQueue = .empty,
         .fontManager = FontManager.init(allocator),
     };
     return app;
 }
 
-pub fn deinit(self: *@This()) void {
-    self.inputQueue.deinit();
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+    self.inputQueue.deinit(allocator);
     self.fontManager.deinit();
     rl.closeWindow();
 }

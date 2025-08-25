@@ -10,20 +10,23 @@ const Vec4 = @Vector(4, f32);
 
 const FONT_SPACING = 2.0;
 
-pub const LinesType = std.DoublyLinkedList(std.ArrayList(u32));
+const LineData = struct {
+    node: std.DoublyLinkedList.Node,
+    data: std.ArrayList(u32),
+};
 
 fontSize: i32,
-lines: LinesType,
-currentLine: *LinesType.Node,
+lines: std.DoublyLinkedList,
+currentLine: *LineData,
 cursorRow: usize,
 cursorCol: usize,
 allocator: std.mem.Allocator,
 
 pub fn init(allocator: std.mem.Allocator) !@This() {
-    var lines = LinesType{};
-    var emptyLine: *LinesType.Node = try allocator.create(LinesType.Node);
-    emptyLine.data = std.ArrayList(u32).init(allocator);
-    lines.append(emptyLine);
+    var lines: std.DoublyLinkedList = .{};
+    var emptyLine: *LineData = try allocator.create(LineData);
+    emptyLine.data = .empty;
+    lines.append(&emptyLine.node);
     return .{
         .fontSize = 30,
         .lines = lines,
@@ -49,15 +52,16 @@ pub fn widget(self: *@This(), app: *Application) Widget {
 inline fn deinitLines(self: *@This()) void {
     var it = self.lines.first;
     while (it) |currentLine| {
+        const lineData: *LineData = @fieldParentPtr("node", *LineData);
         it = currentLine.next;
         self.lines.remove(currentLine);
-        currentLine.data.deinit();
+        lineData.deinit();
         self.allocator.destroy(currentLine);
     }
 }
 
-fn makeNewLine(self: *@This()) !*LinesType.Node {
-    const newLine = try self.allocator.create(LinesType.Node);
+fn makeNewLine(self: *@This()) !*LineData {
+    const newLine = try self.allocator.create(LineData);
     newLine.data = std.ArrayList(u32).init(self.allocator);
     return newLine;
 }
@@ -122,7 +126,7 @@ fn onDown(self: *@This()) void {
 }
 
 fn onEnter(self: *@This()) !void {
-    const newLine = try self.allocator.create(LinesType.Node);
+    const newLine = try self.allocator.create(LineData);
     newLine.data = std.ArrayList(u32).init(self.allocator);
     try newLine.data.appendSlice(self.currentLine.data.items[self.cursorCol..]);
     self.currentLine.data.shrinkAndFree(self.cursorCol);

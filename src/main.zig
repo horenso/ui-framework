@@ -31,7 +31,7 @@ pub fn main() anyerror!void {
         .height = 600,
         .title = "Text Editor",
     }, allocator);
-    defer app.deinit();
+    defer app.deinit(allocator);
 
     var textInput = try TextInput.init(allocator);
     var textInputWidget = textInput.widget(&app);
