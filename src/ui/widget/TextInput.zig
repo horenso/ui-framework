@@ -10,13 +10,14 @@ const Vec2f = vec.Vec2f;
 const Vec4f = vec.Vec4f;
 const Vec2i = vec.Vec2i;
 
-const FONT_SPACING = 2.0;
+const FONT_SPACING = 2;
 
 pub const LinesType = std.DoublyLinkedList(std.ArrayList(u32));
 
 fontSize: i32,
 lines: LinesType,
 currentLine: *LinesType.Node,
+maxLineLength: usize,
 cursorRow: usize,
 cursorCol: usize,
 allocator: std.mem.Allocator,
@@ -30,6 +31,7 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
         .fontSize = 30,
         .lines = lines,
         .currentLine = emptyLine,
+        .maxLineLength = 0,
         .cursorRow = 0,
         .cursorCol = 0,
         .allocator = allocator,
@@ -44,6 +46,7 @@ pub fn widget(self: *@This(), app: *Application) Widget {
             .deinit = deinit,
             .draw = draw,
             .handleEvent = handleEvent,
+            .getMaxContentSize = getMaxContentSize,
         },
     };
 }
@@ -175,6 +178,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event) !bool
             // const encoded = std.unicode.utf8Encode(character, &buffer) catch unreachable;
             // try self.codepoints.insertSlice(self.cursorCol, buffer[0..encoded]);
             try self.currentLine.data.insert(self.cursorCol, character);
+            self.maxLineLength = @max(self.maxLineLength, self.currentLine.data.items.len);
             self.cursorCol += 1;
             return true;
         },
@@ -194,11 +198,10 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event) !bool
         .clickEvent => |clickEvent| {
             const font = try app.fontManager.getFont(@intCast(self.fontSize));
             const fontSizeFloat: f32 = @floatFromInt(self.fontSize);
-            const spacing: comptime_float = FONT_SPACING;
-            const fontWidth = rl.measureTextEx(font, "A", fontSizeFloat, spacing).x;
+            const fontWidth = rl.measureTextEx(font, "A", fontSizeFloat, FONT_SPACING).x;
 
             self.cursorRow = @as(usize, @intCast(clickEvent.y)) / @as(usize, @intCast(self.fontSize));
-            self.cursorCol = @as(usize, @intCast(clickEvent.y)) / @as(usize, @intFromFloat(fontWidth + spacing));
+            self.cursorCol = @as(usize, @intCast(clickEvent.x)) / @as(usize, @intFromFloat(fontWidth + FONT_SPACING));
 
             var currentNode = self.lines.first;
             var index: usize = 0;
@@ -217,7 +220,17 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event) !bool
     }
 }
 
-pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, size: Vec2f, offset: Vec2i) !void {
+pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
+    const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
+    const lineCount = self.lines.len;
+    const fontSizeFloat: f32 = @floatFromInt(self.fontSize);
+    return Vec2f{
+        @as(f32, @floatFromInt(self.maxLineLength)) * fontSizeFloat + FONT_SPACING,
+        @as(f32, @floatFromInt(lineCount)) * fontSizeFloat,
+    };
+}
+
+pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, size: Vec2f, offset: Vec2f) !void {
     rl.clearBackground(rl.Color.white);
 
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
@@ -226,8 +239,7 @@ pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, siz
     // text:
     const font = try app.fontManager.getFont(@intCast(self.fontSize));
     const fontSizeFloat: f32 = @floatFromInt(self.fontSize);
-    const spacing: comptime_float = 1.0;
-    const fontWidth = rl.measureTextEx(font, "A", fontSizeFloat, spacing).x;
+    const fontWidth = rl.measureTextEx(font, "A", fontSizeFloat, FONT_SPACING).x;
 
     var currentNode = self.lines.first;
     var index: usize = 0;
@@ -239,7 +251,7 @@ pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, siz
             @ptrCast(node.data.items),
             rl.Vector2{ .x = position[0], .y = y },
             fontSizeFloat,
-            spacing,
+            FONT_SPACING,
             rl.Color.red,
         );
         currentNode = node.next;
@@ -247,7 +259,7 @@ pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, siz
     }
 
     // draw cursor:
-    const cursorX: f32 = position[0] + (fontWidth + spacing) * @as(f32, @floatFromInt(self.cursorCol));
+    const cursorX: f32 = position[0] + (fontWidth + FONT_SPACING) * @as(f32, @floatFromInt(self.cursorCol));
     const cursorY: f32 = position[1] + fontSizeFloat * @as(f32, @floatFromInt(self.cursorRow));
     rl.drawRectangle(
         @intFromFloat(cursorX),
