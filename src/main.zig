@@ -25,7 +25,7 @@ pub fn main() anyerror!void {
     }, allocator);
     defer app.deinit(allocator);
 
-    var textInput = try TextInput.init(allocator);
+    var textInput = try TextInput.init(allocator, &app.fontManager);
     var textInputWidget = textInput.widget(&app);
     defer textInputWidget.deinit();
 
@@ -43,9 +43,11 @@ pub fn main() anyerror!void {
         while (app.inputQueue.pop()) |event| {
             std.log.debug("Event {any}", .{event});
             if (event == .keyEvent and event.keyEvent.ctrl and event.keyEvent.code == .num1) {
-                textInput.fontSize += 4;
+                const newFontSize: i32 = @intFromFloat(textInput.font.width + 4);
+                textInput.changeFontSize(&app.fontManager, newFontSize);
             } else if (event == .keyEvent and event.keyEvent.ctrl and event.keyEvent.code == .num2) {
-                textInput.fontSize = @max(textInput.fontSize - 4, 0);
+                const newFontSize: i32 = @intFromFloat(@max(textInput.font.height - 4, 0));
+                textInput.changeFontSize(&app.fontManager, newFontSize);
             }
             _ = try scrollableWidget.handleEvent(event);
         }

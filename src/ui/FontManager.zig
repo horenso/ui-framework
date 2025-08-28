@@ -1,9 +1,11 @@
 const std = @import("std");
 const rl = @import("raylib");
 
+const Font = @import("Font.zig");
+
 const Key = i32;
 
-const CacheHashMap = std.AutoArrayHashMap(Key, rl.Font);
+const CacheHashMap = std.AutoArrayHashMap(Key, Font);
 
 var charSet = blk: {
     const chars: []const u8 = " !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~" ++ "öüäÖÜÄßẞ";
@@ -31,13 +33,20 @@ pub fn deinit(self: *@This()) void {
     self.cache.deinit();
 }
 
-pub fn getFont(self: *@This(), size: i32) !rl.Font {
+pub fn getFont(self: *@This(), size: i32) Font {
     const path = "res/VictorMonoAll/VictorMono-Medium.otf";
     if (self.cache.get(size)) |font| {
         return font;
     }
-    const font = try rl.loadFontEx(path, size, &charSet);
-    rl.setTextureFilter(font.texture, .bilinear);
-    try self.cache.put(size, font);
+
+    const raylibFont = rl.loadFontEx(path, size, &charSet) catch @panic("font loading failed");
+    rl.setTextureFilter(raylibFont.texture, .bilinear);
+    const fontMeasurement = rl.measureTextEx(raylibFont, "A", @floatFromInt(size), Font.SPACING);
+    const font: Font = .{
+        .raylibFont = raylibFont,
+        .width = fontMeasurement.x,
+        .height = fontMeasurement.y,
+    };
+    self.cache.put(size, font) catch @panic("self.cache.put() failed");
     return font;
 }

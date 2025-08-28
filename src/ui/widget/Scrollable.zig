@@ -46,15 +46,36 @@ pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, siz
             .{ .r = 200, .g = 200, .b = 0, .a = 60 },
         );
 
-        const ratio = contentSize[1] / size[1];
+        const ratio = size[1] / contentSize[1];
+        const scrolled = -self.offset[1] / contentSize[1];
 
-        const p = rl.Vector2{ .x = size[0] - SCROLLBAR_SIZE, .y = self.offset[1] };
-        const s = rl.Vector2{ .x = SCROLLBAR_SIZE, .y = ratio };
-        std.log.debug("{any} {any} {any}", .{ p, s, ratio });
+        const p = rl.Vector2{ .x = size[0] - SCROLLBAR_SIZE, .y = size[1] * scrolled };
+        const s = rl.Vector2{ .x = SCROLLBAR_SIZE, .y = size[1] * ratio };
+        std.log.debug("VScroll: {any} {any} {any} {any}", .{ p, s, ratio, size[1] * scrolled });
         rl.drawRectangleV(
             p,
             s,
             .red,
+        );
+    }
+    // Horizontal Scrollbar
+    if (contentSize[0] > size[0]) {
+        rl.drawRectangleV(
+            .{ .x = size[0], .y = size[1] + SCROLLBAR_SIZE },
+            .{ .x = size[0], .y = SCROLLBAR_SIZE },
+            .{ .r = 200, .g = 200, .b = 0, .a = 60 },
+        );
+
+        const ratio = size[0] / contentSize[0];
+        const scrolled = -self.offset[0] / contentSize[0];
+
+        const p = rl.Vector2{ .x = size[0] * scrolled, .y = size[1] - SCROLLBAR_SIZE };
+        const s = rl.Vector2{ .x = size[0] * ratio, .y = SCROLLBAR_SIZE };
+        std.log.debug("HScroll: {any} {any} {any} {any}", .{ p, s, ratio, size[0] * scrolled });
+        rl.drawRectangleV(
+            p,
+            s,
+            .blue,
         );
     }
 }
