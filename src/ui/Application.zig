@@ -54,16 +54,20 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     rl.closeWindow();
 }
 
-pub fn draw(self: *@This(), topWidget: Widget) !void {
+pub fn layout(topWidget: *Widget) void {
+    const width: f32 = @floatFromInt(rl.getScreenWidth());
+    const height: f32 = @floatFromInt(rl.getScreenHeight());
+    topWidget.size = .{ width, height };
+}
+
+pub fn draw(self: *@This(), topWidget: *Widget) !void {
     _ = self;
 
     rl.beginDrawing();
     defer rl.endDrawing();
 
-    const width: f32 = @floatFromInt(rl.getScreenWidth());
-    const height: f32 = @floatFromInt(rl.getScreenHeight());
     rl.clearBackground(rl.Color.sky_blue);
-    try topWidget.draw(Vec2f{ 0, 0 }, Vec2f{ width, height }, Vec2f{ 0, 0 });
+    try topWidget.draw(Vec2f{ 0, 0 }, Vec2f{ 0, 0 });
 }
 
 pub fn shouldClose(self: *@This()) bool {

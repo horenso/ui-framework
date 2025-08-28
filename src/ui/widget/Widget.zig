@@ -12,9 +12,11 @@ ptr: *anyopaque,
 vtable: *const VTable,
 
 app: *Application,
+size: Vec2f = .{ 0, 0 },
 
 pub const VTable = struct {
     deinit: *const fn (*anyopaque) void,
+    layout: *const fn (*anyopaque, size: Vec2f) void,
     draw: *const fn (*const anyopaque, app: *Application, position: Vec2f, size: Vec2f, offset: Vec2f) anyerror!void,
     /// Returns true if the event was handled, false otherwise.
     handleEvent: *const fn (*anyopaque, app: *Application, event: Event) anyerror!bool,
@@ -29,12 +31,16 @@ pub fn getMaxContentSize(self: @This()) Vec2f {
     return self.vtable.getMaxContentSize(self.ptr);
 }
 
-pub fn draw(self: @This(), position: Vec2f, size: Vec2f, offset: Vec2f) anyerror!void {
+pub fn layout(self: @This(), size: Vec2f) void {
+    return self.vtable.layout(size);
+}
+
+pub fn draw(self: @This(), position: Vec2f, offset: Vec2f) anyerror!void {
     rl.beginScissorMode(
         @intFromFloat(position[0]),
         @intFromFloat(position[1]),
-        @intFromFloat(size[0]),
-        @intFromFloat(size[1]),
+        @intFromFloat(self.size[0]),
+        @intFromFloat(self.size[1]),
     );
     defer rl.endScissorMode();
     if (offset[0] != 0 or offset[1] != 0) {
@@ -46,9 +52,9 @@ pub fn draw(self: @This(), position: Vec2f, size: Vec2f, offset: Vec2f) anyerror
         };
         camera.begin();
         defer camera.end();
-        return self.vtable.draw(self.ptr, self.app, position, size, offset);
+        return self.vtable.draw(self.ptr, self.app, position, self.size, offset);
     } else {
-        return self.vtable.draw(self.ptr, self.app, position, size, Vec2f{ 0, 0 });
+        return self.vtable.draw(self.ptr, self.app, position, self.size, Vec2f{ 0, 0 });
     }
 }
 

@@ -31,6 +31,7 @@ allocator: std.mem.Allocator,
 pub fn init(allocator: std.mem.Allocator, fontManager: *FontManager) !@This() {
     var lines: std.DoublyLinkedList = .{};
     var emptyLine: *LineData = try allocator.create(LineData);
+    emptyLine.* = std.mem.zeroes(LineData);
     emptyLine.data = .empty;
     lines.append(&emptyLine.node);
 
@@ -53,6 +54,7 @@ pub fn widget(self: *@This(), app: *Application) Widget {
         .ptr = self,
         .vtable = &.{
             .deinit = deinit,
+            .layout = layout,
             .draw = draw,
             .handleEvent = handleEvent,
             .getMaxContentSize = getMaxContentSize,
@@ -63,8 +65,9 @@ pub fn widget(self: *@This(), app: *Application) Widget {
 inline fn deinitLines(self: *@This()) void {
     var it = self.lines.first;
     while (it) |currentNode| {
-        const line: *LineData = @fieldParentPtr("node", currentNode);
         it = currentNode.next;
+
+        const line: *LineData = @fieldParentPtr("node", currentNode);
         self.lines.remove(currentNode);
         line.data.deinit(self.allocator);
         self.allocator.destroy(line);
@@ -74,11 +77,12 @@ inline fn deinitLines(self: *@This()) void {
 fn setLongestLine(self: *@This()) void {
     var it = self.lines.first;
     while (it) |currentNode| {
+        it = currentNode.next;
+
         const line: *LineData = @fieldParentPtr("node", currentNode);
         if (self.longestLine.data.items.len < line.data.items.len) {
             self.longestLine = line;
         }
-        it = currentNode.next;
     }
 }
 
@@ -95,8 +99,8 @@ pub fn changeFontSize(self: *@This(), fontManager: *FontManager, fontSize: i32) 
 pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const u8) !void {
     self.deinitLines();
 
-    var lines_it = std.mem.splitSequence(u8, utf8Text, "\n");
-    while (lines_it.next()) |line| {
+    var splitIterator = std.mem.splitSequence(u8, utf8Text, "\n");
+    while (splitIterator.next()) |line| {
         var newLine = try self.makeNewLine();
         self.lines.append(&newLine.node);
 
@@ -109,9 +113,12 @@ pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const 
     }
     if (self.lines.first) |firstLine| {
         self.currentLine = @fieldParentPtr("node", firstLine);
+        self.longestLine = self.currentLine;
     } else {
         const newLine = try self.makeNewLine();
         self.lines.append(&newLine.node);
+        self.currentLine = newLine;
+        self.longestLine = newLine;
     }
 }
 
@@ -260,6 +267,11 @@ pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
         @as(f32, @floatFromInt(self.longestLine.data.items.len)) * self.font.width + Font.SPACING,
         @as(f32, @floatFromInt(self.lines.len())) * self.font.height,
     };
+}
+
+pub fn layout(opaquePtr: *const anyopaque, size: Vec2f) void {
+    _ = opaquePtr;
+    _ = size;
 }
 
 pub fn draw(opaquePtr: *const anyopaque, _: *Application, position: Vec2f, size: Vec2f, offset: Vec2f) !void {

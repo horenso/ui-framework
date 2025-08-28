@@ -38,7 +38,8 @@ pub fn main() anyerror!void {
 
     while (!app.shouldClose()) {
         app.keyboardInputMode = .Character;
-        try app.draw(scrollableWidget);
+        Application.layout(&scrollableWidget);
+        try app.draw(&scrollableWidget);
         try app.pollEvents();
         while (app.inputQueue.pop()) |event| {
             std.log.debug("Event {any}", .{event});
