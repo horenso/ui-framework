@@ -13,6 +13,7 @@ const Vec4f = vec.Vec4f;
 const Vec2i = vec.Vec2i;
 
 const INITIAL_FONT_WIDTH = 30;
+const CURSOR_WIDTH = 4.0;
 
 const LineData = struct {
     node: std.DoublyLinkedList.Node,
@@ -264,7 +265,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event, _: Ve
 pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
     return .{
-        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * (self.font.width + Font.SPACING),
+        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * (self.font.width + Font.SPACING) + CURSOR_WIDTH,
         @as(f32, @floatFromInt(self.lines.len())) * self.font.height,
     };
 }
@@ -304,7 +305,7 @@ pub fn draw(opaquePtr: *const anyopaque, _: *Application, position: Vec2f, size:
     const cursorY: f32 = position[1] + self.font.height * @as(f32, @floatFromInt(self.cursorRow));
     rl.drawRectangleV(
         .{ .x = cursorX, .y = cursorY },
-        .{ .x = 4.0, .y = self.font.height },
+        .{ .x = CURSOR_WIDTH, .y = self.font.height },
         rl.Color.init(0, 0, 0, 160),
     );
 }

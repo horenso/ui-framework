@@ -55,7 +55,7 @@ pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, siz
             SCROLLBAR_BACKGROUND_COLOR,
         );
 
-        const ratio = size[1] / contentSize[1];
+        const ratio = (size[1] - SCROLLBAR_SIZE) / contentSize[1];
         const scrolled = -self.offset[1] / contentSize[1];
 
         rl.drawRectangleV(
@@ -73,7 +73,7 @@ pub fn draw(opaquePtr: *const anyopaque, app: *Application, position: Vec2f, siz
             SCROLLBAR_BACKGROUND_COLOR,
         );
 
-        const ratio = size[0] / contentSize[0];
+        const ratio = (size[0] - SCROLLBAR_SIZE) / contentSize[0];
         const scrolled = -self.offset[0] / contentSize[0];
 
         rl.drawRectangleV(
@@ -100,11 +100,13 @@ pub fn handleEvent(opaquePtr: *anyopaque, _: *Application, event: Event, size: V
     switch (event) {
         .mouseWheelEvent => |mouseWheelMove| {
             const childSize = self.child.getMaxContentSize();
-            const newOffsetX = self.offset[0] + mouseWheelMove[0] * SCROLL_SPEED;
-            const newOffsetY = self.offset[1] + mouseWheelMove[1] * SCROLL_SPEED;
+            const newOffset: Vec2f = .{
+                self.offset[0] + mouseWheelMove[0] * SCROLL_SPEED,
+                self.offset[1] + mouseWheelMove[1] * SCROLL_SPEED,
+            };
             self.offset = .{
-                std.math.clamp(newOffsetX, size[0] - childSize[0], 0),
-                std.math.clamp(newOffsetY, size[1] - childSize[1], 0),
+                std.math.clamp(newOffset[0], size[0] - childSize[0] - SCROLLBAR_SIZE, 0),
+                std.math.clamp(newOffset[1], size[1] - childSize[1] - SCROLLBAR_SIZE, 0),
             };
 
             std.log.debug(
