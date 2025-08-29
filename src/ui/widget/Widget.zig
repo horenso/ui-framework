@@ -19,7 +19,7 @@ pub const VTable = struct {
     layout: *const fn (*anyopaque, size: Vec2f) void,
     draw: *const fn (*const anyopaque, app: *Application, position: Vec2f, size: Vec2f, offset: Vec2f) anyerror!void,
     /// Returns true if the event was handled, false otherwise.
-    handleEvent: *const fn (*anyopaque, app: *Application, event: Event) anyerror!bool,
+    handleEvent: *const fn (*anyopaque, app: *Application, event: Event, size: Vec2f) anyerror!bool,
     getMaxContentSize: *const fn (*const anyopaque) Vec2f,
 };
 
@@ -31,8 +31,9 @@ pub fn getMaxContentSize(self: @This()) Vec2f {
     return self.vtable.getMaxContentSize(self.ptr);
 }
 
-pub fn layout(self: @This(), size: Vec2f) void {
-    return self.vtable.layout(size);
+pub fn layout(self: *@This(), size: Vec2f) void {
+    self.size = size;
+    return self.vtable.layout(self.ptr, size);
 }
 
 pub fn draw(self: @This(), position: Vec2f, offset: Vec2f) anyerror!void {
@@ -59,5 +60,5 @@ pub fn draw(self: @This(), position: Vec2f, offset: Vec2f) anyerror!void {
 }
 
 pub fn handleEvent(self: @This(), event: Event) anyerror!bool {
-    return self.vtable.handleEvent(self.ptr, self.app, event);
+    return self.vtable.handleEvent(self.ptr, self.app, event, self.size);
 }

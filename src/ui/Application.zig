@@ -38,6 +38,7 @@ fontManager: FontManager,
 pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
     rl.setConfigFlags(.{ .window_resizable = true });
     rl.initWindow(config.width, config.height, config.title);
+    rl.setWindowMinSize(300, 300);
     rl.setMouseCursor(.ibeam);
     rl.setTargetFPS(60);
     const app = @This(){
@@ -57,7 +58,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
 pub fn layout(topWidget: *Widget) void {
     const width: f32 = @floatFromInt(rl.getScreenWidth());
     const height: f32 = @floatFromInt(rl.getScreenHeight());
-    topWidget.size = .{ width, height };
+    topWidget.layout(.{ width, height });
 }
 
 pub fn draw(self: *@This(), topWidget: *Widget) !void {

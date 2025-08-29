@@ -74,14 +74,16 @@ inline fn deinitLines(self: *@This()) void {
     }
 }
 
-fn setLongestLine(self: *@This()) void {
+fn findLongestLine(self: *@This()) void {
     var it = self.lines.first;
+    var longest: usize = 0;
     while (it) |currentNode| {
         it = currentNode.next;
 
         const line: *LineData = @fieldParentPtr("node", currentNode);
-        if (self.longestLine.data.items.len < line.data.items.len) {
+        if (line.data.items.len > longest) {
             self.longestLine = line;
+            longest = line.data.items.len;
         }
     }
 }
@@ -113,7 +115,7 @@ pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const 
     }
     if (self.lines.first) |firstLine| {
         self.currentLine = @fieldParentPtr("node", firstLine);
-        self.longestLine = self.currentLine;
+        self.findLongestLine();
     } else {
         const newLine = try self.makeNewLine();
         self.lines.append(&newLine.node);
@@ -185,7 +187,7 @@ fn onBackspace(self: *@This()) !void {
         self.allocator.destroy(self.currentLine);
         self.currentLine = line;
 
-        self.setLongestLine();
+        self.findLongestLine();
     }
 }
 
@@ -193,7 +195,7 @@ fn onDelete(self: *@This()) !void {
     if (self.cursorCol < self.currentLine.data.items.len) {
         _ = self.currentLine.data.orderedRemove(self.cursorCol);
         if (self.currentLine == self.longestLine) {
-            self.setLongestLine();
+            self.findLongestLine();
         }
     } else if (self.currentLine.node.next) |nextLine| {
         const line: *LineData = @fieldParentPtr("node", nextLine);
@@ -202,7 +204,7 @@ fn onDelete(self: *@This()) !void {
         line.data.deinit(self.allocator);
         self.allocator.destroy(nextLine);
 
-        self.setLongestLine();
+        self.findLongestLine();
     }
 }
 
@@ -211,7 +213,7 @@ pub fn deinit(opaquePtr: *anyopaque) void {
     self.deinitLines();
 }
 
-pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event) !bool {
+pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event, _: Vec2f) !bool {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     switch (event) {
         .charEvent => |character| {
@@ -261,17 +263,15 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event) !bool
 
 pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
-
-    // std.log.debug("{any}", .{self.longestLine});
     return .{
-        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * self.font.width + Font.SPACING,
+        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * (self.font.width + Font.SPACING),
         @as(f32, @floatFromInt(self.lines.len())) * self.font.height,
     };
 }
 
-pub fn layout(opaquePtr: *const anyopaque, size: Vec2f) void {
-    _ = opaquePtr;
-    _ = size;
+pub fn layout(_: *const anyopaque, _: Vec2f) void {
+    // Ideas for this
+    // - important for line break if on
 }
 
 pub fn draw(opaquePtr: *const anyopaque, _: *Application, position: Vec2f, size: Vec2f, offset: Vec2f) !void {
