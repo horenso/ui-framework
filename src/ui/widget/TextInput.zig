@@ -12,8 +12,9 @@ const Vec2f = vec.Vec2f;
 const Vec4f = vec.Vec4f;
 const Vec2i = vec.Vec2i;
 
-const INITIAL_FONT_WIDTH = 30;
-const CURSOR_WIDTH = 4.0;
+const INITIAL_FONT_WIDTH = 70;
+
+const DEBUG_PRINT_CHAR_OUTLINE = false;
 
 const LineData = struct {
     node: std.DoublyLinkedList.Node,
@@ -242,8 +243,9 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event, _: Ve
             return true;
         },
         .clickEvent => |clickEvent| {
-            self.cursorRow = @as(usize, @intCast(clickEvent.y)) / @as(usize, @intFromFloat(self.font.width));
-            self.cursorCol = @as(usize, @intCast(clickEvent.x)) / @as(usize, @intFromFloat(self.font.width + Font.SPACING));
+            const clickPosFloat: Vec2f = .{ @floatFromInt(clickEvent.x), @floatFromInt(clickEvent.y) };
+            self.cursorRow = @intFromFloat(clickPosFloat[1] / (self.font.height + Font.SPACING));
+            self.cursorCol = @intFromFloat(@round(clickPosFloat[0] / (self.font.width + Font.SPACING)));
 
             var currentNode = self.lines.first;
             var index: usize = 0;
@@ -265,7 +267,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event, _: Ve
 pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
     return .{
-        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * (self.font.width + Font.SPACING) + CURSOR_WIDTH,
+        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * (self.font.width + Font.SPACING) + getCursorWidth(self.font.width),
         @as(f32, @floatFromInt(self.lines.len())) * self.font.height,
     };
 }
@@ -275,37 +277,69 @@ pub fn layout(_: *const anyopaque, _: Vec2f) void {
     // - important for line break if on
 }
 
-pub fn draw(opaquePtr: *const anyopaque, _: *Application, position: Vec2f, size: Vec2f, offset: Vec2f) !void {
+fn drawText(self: *const @This()) void {
+    var it = self.lines.first;
+    var index: usize = 0;
+
+    const step_x: f32 = self.font.width + Font.SPACING;
+
+    while (it) |currentNode| {
+        const lineData: *LineData = @fieldParentPtr("node", currentNode);
+        const codepoints = lineData.data.items;
+
+        const indexFloat: f32 = @floatFromInt(index);
+        const y: f32 = indexFloat * self.font.height;
+        var x: f32 = 0;
+
+        if (DEBUG_PRINT_CHAR_OUTLINE) {
+            for (codepoints) |_| {
+                rl.drawRectangleLines(
+                    @intFromFloat(x),
+                    @intFromFloat(y),
+                    @intFromFloat(self.font.width),
+                    @intFromFloat(self.font.height),
+                    rl.Color.green,
+                );
+                x += step_x;
+            }
+        }
+
+        rl.drawTextCodepoints(
+            self.font.raylibFont,
+            @ptrCast(codepoints),
+            rl.Vector2{ .x = 0, .y = y },
+            self.font.height,
+            Font.SPACING,
+            rl.Color.red,
+        );
+
+        it = currentNode.next;
+        index += 1;
+    }
+}
+
+fn getCursorWidth(fontWidth: f32) f32 {
+    const scaled: f32 = fontWidth / 8.0;
+    return @max(1, @abs(scaled));
+}
+
+pub fn draw(opaquePtr: *const anyopaque, size: Vec2f, offset: Vec2f) !void {
     rl.clearBackground(rl.Color.white);
 
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
     _ = size;
     _ = offset;
 
-    var it = self.lines.first;
-    var index: usize = 0;
-    while (it) |currentNode| {
-        const lineData: *LineData = @fieldParentPtr("node", currentNode);
-        const indexFloat: f32 = @floatFromInt(index);
-        const y: f32 = position[1] + indexFloat * self.font.height;
-        rl.drawTextCodepoints(
-            self.font.raylibFont,
-            @ptrCast(lineData.data.items),
-            rl.Vector2{ .x = position[0], .y = y },
-            self.font.height,
-            Font.SPACING,
-            rl.Color.red,
-        );
-        it = currentNode.next;
-        index += 1;
-    }
+    self.drawText();
 
     // draw cursor:
-    const cursorX: f32 = position[0] + (self.font.width + Font.SPACING) * @as(f32, @floatFromInt(self.cursorCol));
-    const cursorY: f32 = position[1] + self.font.height * @as(f32, @floatFromInt(self.cursorRow));
+    const cursor_width = getCursorWidth(self.font.width);
+
+    const cursorX: f32 = (self.font.width + Font.SPACING) * @as(f32, @floatFromInt(self.cursorCol));
+    const cursorY: f32 = self.font.height * @as(f32, @floatFromInt(self.cursorRow));
     rl.drawRectangleV(
         .{ .x = cursorX, .y = cursorY },
-        .{ .x = CURSOR_WIDTH, .y = self.font.height },
+        .{ .x = cursor_width, .y = self.font.height },
         rl.Color.init(0, 0, 0, 160),
     );
 }

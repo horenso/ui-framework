@@ -67,8 +67,8 @@ pub fn draw(self: *@This(), topWidget: *Widget) !void {
     rl.beginDrawing();
     defer rl.endDrawing();
 
-    rl.clearBackground(rl.Color.sky_blue);
-    try topWidget.draw(Vec2f{ 0, 0 }, Vec2f{ 0, 0 });
+    rl.clearBackground(.sky_blue);
+    try topWidget.draw(.{ 0, 0 });
 }
 
 pub fn shouldClose(self: *@This()) bool {
