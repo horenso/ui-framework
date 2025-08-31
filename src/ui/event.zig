@@ -21,8 +21,8 @@ pub const KeyEvent = struct {
     shift: bool,
 };
 pub const ClickEvent = struct {
-    x: u32,
-    y: u32,
+    x: i32,
+    y: i32,
     button: enum {
         left,
         middle,
