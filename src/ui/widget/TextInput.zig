@@ -6,6 +6,8 @@ const Event = @import("../event.zig").Event;
 const Font = @import("../Font.zig");
 const FontManager = @import("../FontManager.zig");
 const Widget = @import("./Widget.zig");
+const ScrollContainer = @import("./ScrollContainer.zig");
+const ScrollProxy = @import("./ScrollProxy.zig");
 
 const vec = @import("../vec.zig");
 const Vec2f = vec.Vec2f;
@@ -21,6 +23,8 @@ const LineData = struct {
     data: std.ArrayList(u32),
 };
 
+base: Widget.Base,
+
 font: Font,
 
 lines: std.DoublyLinkedList = .{},
@@ -28,11 +32,12 @@ currentLine: *LineData,
 longestLine: *LineData,
 cursorRow: usize,
 cursorCol: usize,
-allocator: std.mem.Allocator,
 
-pub fn init(allocator: std.mem.Allocator, fontManager: *FontManager) !@This() {
+scrollProxy: ScrollProxy,
+
+pub fn init(app: *Application, fontManager: *FontManager) !@This() {
     var lines: std.DoublyLinkedList = .{};
-    var emptyLine: *LineData = try allocator.create(LineData);
+    var emptyLine: *LineData = try app.allocator.create(LineData);
     emptyLine.* = std.mem.zeroes(LineData);
     emptyLine.data = .empty;
     lines.append(&emptyLine.node);
@@ -40,19 +45,23 @@ pub fn init(allocator: std.mem.Allocator, fontManager: *FontManager) !@This() {
     const font = fontManager.getFont(INITIAL_FONT_WIDTH);
 
     return .{
+        .base = .{ .app = app },
         .font = font,
         .lines = lines,
         .currentLine = emptyLine,
         .longestLine = emptyLine,
         .cursorRow = 0,
         .cursorCol = 0,
-        .allocator = allocator,
+        .scrollProxy = .{ .scrollContainer = null },
     };
 }
 
-pub fn widget(self: *@This(), app: *Application) Widget {
+pub fn setScrollContainer(self: *@This(), scrollContainer: *ScrollContainer) void {
+    self.scrollProxy.scrollContainer = scrollContainer;
+}
+
+pub fn widget(self: *@This()) Widget {
     return .{
-        .app = app,
         .ptr = self,
         .vtable = &.{
             .deinit = deinit,
@@ -60,6 +69,7 @@ pub fn widget(self: *@This(), app: *Application) Widget {
             .draw = draw,
             .handleEvent = handleEvent,
             .getMaxContentSize = getMaxContentSize,
+            .getSize = getSize,
         },
     };
 }
@@ -71,8 +81,8 @@ inline fn deinitLines(self: *@This()) void {
 
         const line: *LineData = @fieldParentPtr("node", currentNode);
         self.lines.remove(currentNode);
-        line.data.deinit(self.allocator);
-        self.allocator.destroy(line);
+        line.data.deinit(self.base.app.allocator);
+        self.base.app.allocator.destroy(line);
     }
 }
 
@@ -91,7 +101,7 @@ fn findLongestLine(self: *@This()) void {
 }
 
 fn makeNewLine(self: *@This()) !*LineData {
-    const newLine = try self.allocator.create(LineData);
+    const newLine = try self.base.app.allocator.create(LineData);
     newLine.data = std.ArrayList(u32).empty;
     return newLine;
 }
@@ -163,10 +173,10 @@ fn onDown(self: *@This()) void {
 }
 
 fn onEnter(self: *@This()) !void {
-    const newLine = try self.allocator.create(LineData);
+    const newLine = try self.base.app.allocator.create(LineData);
     newLine.data = std.ArrayList(u32).empty;
-    try newLine.data.appendSlice(self.allocator, self.currentLine.data.items[self.cursorCol..]);
-    self.currentLine.data.shrinkAndFree(self.allocator, self.cursorCol);
+    try newLine.data.appendSlice(self.base.app.allocator, self.currentLine.data.items[self.cursorCol..]);
+    self.currentLine.data.shrinkAndFree(self.base.app.allocator, self.cursorCol);
     self.lines.insertAfter(&self.currentLine.node, &newLine.node);
     self.currentLine = newLine;
     self.cursorCol = 0;
@@ -184,9 +194,9 @@ fn onBackspace(self: *@This()) !void {
         self.cursorCol = line.data.items.len;
         self.cursorRow -= 1;
 
-        try line.data.appendSlice(self.allocator, self.currentLine.data.items[0..]);
-        self.currentLine.data.deinit(self.allocator);
-        self.allocator.destroy(self.currentLine);
+        try line.data.appendSlice(self.base.app.allocator, self.currentLine.data.items[0..]);
+        self.currentLine.data.deinit(self.base.app.allocator);
+        self.base.app.allocator.destroy(self.currentLine);
         self.currentLine = line;
 
         self.findLongestLine();
@@ -201,10 +211,10 @@ fn onDelete(self: *@This()) !void {
         }
     } else if (self.currentLine.node.next) |nextLine| {
         const line: *LineData = @fieldParentPtr("node", nextLine);
-        try self.currentLine.data.appendSlice(self.allocator, line.data.items[0..]);
+        try self.currentLine.data.appendSlice(self.base.app.allocator, line.data.items[0..]);
         self.lines.remove(nextLine);
-        line.data.deinit(self.allocator);
-        self.allocator.destroy(nextLine);
+        line.data.deinit(self.base.app.allocator);
+        self.base.app.allocator.destroy(nextLine);
 
         self.findLongestLine();
     }
@@ -215,14 +225,14 @@ pub fn deinit(opaquePtr: *anyopaque) void {
     self.deinitLines();
 }
 
-pub fn handleEvent(opaquePtr: *anyopaque, app: *Application, event: Event, _: Vec2f) !bool {
+pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     switch (event) {
         .charEvent => |character| {
             // var buffer: [4]u8 = std.mem.zeroes([4]u8);
             // const encoded = std.unicode.utf8Encode(character, &buffer) catch unreachable;
             // try self.codepoints.insertSlice(self.cursorCol, buffer[0..encoded]);
-            try self.currentLine.data.insert(app.allocator, self.cursorCol, character);
+            try self.currentLine.data.insert(self.base.app.allocator, self.cursorCol, character);
             if (self.currentLine.data.items.len > self.longestLine.data.items.len) {
                 self.longestLine = self.currentLine;
             }
@@ -272,9 +282,9 @@ pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
     };
 }
 
-pub fn layout(_: *const anyopaque, _: Vec2f) void {
-    // Ideas for this
-    // - important for line break if on
+pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
+    const self: *@This() = @ptrCast(@alignCast(opaquePtr));
+    self.base.size = size;
 }
 
 fn drawText(self: *const @This()) void {
@@ -323,12 +333,10 @@ fn getCursorWidth(fontWidth: f32) f32 {
     return @max(1, @abs(scaled));
 }
 
-pub fn draw(opaquePtr: *const anyopaque, size: Vec2f, offset: Vec2f) !void {
+pub fn draw(opaquePtr: *const anyopaque) !void {
     rl.clearBackground(rl.Color.white);
 
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
-    _ = size;
-    _ = offset;
 
     self.drawText();
 
@@ -342,4 +350,19 @@ pub fn draw(opaquePtr: *const anyopaque, size: Vec2f, offset: Vec2f) !void {
         .{ .x = cursor_width, .y = self.font.height },
         rl.Color.init(0, 0, 0, 160),
     );
+}
+
+pub fn getSize(opaquePtr: *const anyopaque) Vec2f {
+    const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
+    return self.base.size;
+}
+
+pub fn getOffset(opaquePtr: *const anyopaque) Vec2f {
+    const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
+    return self.offset;
+}
+
+pub fn setOffset(opaquePtr: *anyopaque, offset: Vec2f) void {
+    const self: *@This() = @ptrCast(@alignCast(opaquePtr));
+    self.offset = offset;
 }

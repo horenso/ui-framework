@@ -4,7 +4,7 @@ const rl = @import("raylib");
 const Application = @import("ui/Application.zig");
 const TextInput = @import("ui/widget/TextInput.zig");
 const Widget = @import("ui/widget/Widget.zig");
-const Scrollable = @import("ui/widget/Scrollable.zig");
+const ScrollContainer = @import("ui/widget/ScrollContainer.zig");
 
 pub fn main() anyerror!void {
     var debugAllocator = std.heap.DebugAllocator(.{}){};
@@ -25,13 +25,15 @@ pub fn main() anyerror!void {
     }, allocator);
     defer app.deinit(allocator);
 
-    var textInput = try TextInput.init(allocator, &app.fontManager);
-    var textInputWidget = textInput.widget(&app);
+    var textInput = try TextInput.init(&app, &app.fontManager);
+    var textInputWidget = textInput.widget();
     defer textInputWidget.deinit();
 
-    var scrollable = Scrollable.init(textInputWidget);
-    var scrollableWidget = scrollable.widget(&app);
-    defer scrollableWidget.deinit();
+    var scrollContainer = ScrollContainer.init(&app, textInputWidget);
+    var scrollContainerWidget = scrollContainer.widget();
+    defer scrollContainerWidget.deinit();
+
+    textInput.setScrollContainer(&scrollContainer);
 
     var argsIt = std.process.args();
     _ = argsIt.next(); // Skip name of executable
@@ -42,8 +44,8 @@ pub fn main() anyerror!void {
 
     while (!app.shouldClose()) {
         app.keyboardInputMode = .Character;
-        Application.layout(&scrollableWidget);
-        try app.draw(&scrollableWidget);
+        Application.layout(&scrollContainerWidget);
+        try app.draw(&scrollContainerWidget);
         try app.pollEvents();
         while (app.inputQueue.pop()) |event| {
             std.log.debug("Event {any}", .{event});
@@ -54,7 +56,7 @@ pub fn main() anyerror!void {
                 const newFontSize: i32 = @intFromFloat(@max(textInput.font.height - 4, 0));
                 textInput.changeFontSize(&app.fontManager, newFontSize);
             }
-            _ = try scrollableWidget.handleEvent(event);
+            _ = try scrollContainerWidget.handleEvent(event);
         }
     }
 }

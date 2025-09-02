@@ -1,3 +1,4 @@
+const std = @import("std");
 const rl = @import("raylib");
 
 const Application = @import("../Application.zig");
@@ -11,16 +12,20 @@ const Vec2i = vec.Vec2i;
 ptr: *anyopaque,
 vtable: *const VTable,
 
-app: *Application,
-size: Vec2f = .{ 0, 0 },
+pub const Base = struct {
+    app: *Application,
+    size: Vec2f = .{ 0, 0 },
+};
 
 pub const VTable = struct {
     deinit: *const fn (*anyopaque) void,
     layout: *const fn (*anyopaque, size: Vec2f) void,
-    draw: *const fn (*const anyopaque, size: Vec2f, offset: Vec2f) anyerror!void,
+    draw: *const fn (*const anyopaque) anyerror!void,
     /// Returns true if the event was handled, false otherwise.
-    handleEvent: *const fn (*anyopaque, app: *Application, event: Event, size: Vec2f) anyerror!bool,
+    handleEvent: *const fn (*anyopaque, event: Event) anyerror!bool,
     getMaxContentSize: *const fn (*const anyopaque) Vec2f,
+
+    getSize: *const fn (*const anyopaque) Vec2f,
 };
 
 pub fn deinit(self: @This()) void {
@@ -31,34 +36,26 @@ pub fn getMaxContentSize(self: @This()) Vec2f {
     return self.vtable.getMaxContentSize(self.ptr);
 }
 
-pub fn layout(self: *@This(), size: Vec2f) void {
-    self.size = size;
+pub fn layout(self: @This(), size: Vec2f) void {
     return self.vtable.layout(self.ptr, size);
 }
 
-pub fn draw(self: @This(), offset: Vec2f) anyerror!void {
+pub fn draw(self: @This()) anyerror!void {
+    const size = self.getSize();
     rl.beginScissorMode(
         @intFromFloat(0),
         @intFromFloat(0),
-        @intFromFloat(self.size[0]),
-        @intFromFloat(self.size[1]),
+        @intFromFloat(size[0]),
+        @intFromFloat(size[1]),
     );
     defer rl.endScissorMode();
-    if (offset[0] != 0 or offset[1] != 0) {
-        const camera = rl.Camera2D{
-            .offset = .{ .x = offset[0], .y = offset[1] },
-            .target = .{ .x = 0, .y = 0 },
-            .rotation = 0.0,
-            .zoom = 1.0,
-        };
-        camera.begin();
-        defer camera.end();
-        return self.vtable.draw(self.ptr, self.size, offset);
-    } else {
-        return self.vtable.draw(self.ptr, self.size, Vec2f{ 0, 0 });
-    }
+    try self.vtable.draw(self.ptr);
 }
 
 pub fn handleEvent(self: @This(), event: Event) anyerror!bool {
-    return self.vtable.handleEvent(self.ptr, self.app, event, self.size);
+    return self.vtable.handleEvent(self.ptr, event);
+}
+
+pub fn getSize(self: @This()) Vec2f {
+    return self.vtable.getSize(self.ptr);
 }

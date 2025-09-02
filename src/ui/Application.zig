@@ -68,7 +68,7 @@ pub fn draw(self: *@This(), topWidget: *Widget) !void {
     defer rl.endDrawing();
 
     rl.clearBackground(.sky_blue);
-    try topWidget.draw(.{ 0, 0 });
+    try topWidget.draw();
 }
 
 pub fn shouldClose(self: *@This()) bool {
