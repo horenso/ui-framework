@@ -75,7 +75,7 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
         const ratio = (self.base.size[0] - spaceForOtherScrollbar) / contentSize[0];
         self.scrollbarX.thumbLength = self.scrollbarX.length * ratio;
 
-        const scrolled = -self.offset[0] / (contentSize[0] - self.scrollbarX.length);
+        const scrolled = self.offset[0] / (contentSize[0] - self.scrollbarX.length);
         self.scrollbarX.thumbPos = (self.scrollbarX.length - self.scrollbarX.thumbLength) * scrolled;
     }
 
@@ -86,7 +86,7 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
         const ratio = (self.base.size[1] - spaceForOtherScrollbar) / contentSize[1];
         self.scrollbarY.thumbLength = self.scrollbarY.length * ratio;
 
-        const scrolled = -self.offset[1] / (contentSize[1] - self.scrollbarY.length);
+        const scrolled = self.offset[1] / (contentSize[1] - self.scrollbarY.length);
         self.scrollbarY.thumbPos = (self.scrollbarY.length - self.scrollbarY.thumbLength) * scrolled;
     }
 }
@@ -96,7 +96,7 @@ pub fn draw(opaquePtr: *const anyopaque) !void {
 
     {
         const camera = rl.Camera2D{
-            .offset = .{ .x = self.offset[0], .y = self.offset[1] },
+            .offset = .{ .x = -self.offset[0], .y = -self.offset[1] },
             .target = .{ .x = 0, .y = 0 },
             .rotation = 0.0,
             .zoom = 1.0,
@@ -134,21 +134,21 @@ pub fn draw(opaquePtr: *const anyopaque) !void {
 }
 
 pub fn getMaxScroll(self: *@This(), size: Vec2f, contentSize: Vec2f) Vec2f {
-    const lowerUnbound: Vec2f = .{
-        size[0] - contentSize[0] - @as(f32, if (self.scrollbarY.visible) SCROLLBAR_SIZE else 0),
-        size[1] - contentSize[1] - @as(f32, if (self.scrollbarX.visible) SCROLLBAR_SIZE else 0),
+    const upperUnbound: Vec2f = .{
+        contentSize[0] - size[0] + @as(f32, if (self.scrollbarY.visible) SCROLLBAR_SIZE else 0),
+        contentSize[1] - size[1] + @as(f32, if (self.scrollbarX.visible) SCROLLBAR_SIZE else 0),
     };
     return .{
-        @min(0, lowerUnbound[0]),
-        @min(0, lowerUnbound[1]),
+        @max(0, upperUnbound[0]),
+        @max(0, upperUnbound[1]),
     };
 }
 
 fn setAndClampOffset(self: *@This(), contentSize: Vec2f, newOffset: Vec2f) void {
-    const lower = self.getMaxScroll(self.base.size, contentSize);
+    const upper = self.getMaxScroll(self.base.size, contentSize);
     self.offset = .{
-        std.math.clamp(newOffset[0], lower[0], 0),
-        std.math.clamp(newOffset[1], lower[1], 0),
+        std.math.clamp(newOffset[0], 0, upper[0]),
+        std.math.clamp(newOffset[1], 0, upper[1]),
     };
 }
 
@@ -157,8 +157,8 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
 
     const e = if (event == .clickEvent) blk: {
         var newClickEvent = event;
-        newClickEvent.clickEvent.x -= @intFromFloat(self.offset[0]);
-        newClickEvent.clickEvent.y -= @intFromFloat(self.offset[1]);
+        newClickEvent.clickEvent.x += @intFromFloat(self.offset[0]);
+        newClickEvent.clickEvent.y += @intFromFloat(self.offset[1]);
         break :blk newClickEvent;
     } else event;
     const childHandledEvent = try self.child.handleEvent(e);
@@ -174,10 +174,10 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
 
             var newOffset = self.offset;
             if (canScrollX) {
-                newOffset[0] = self.offset[0] + mouseWheelMove[0] * SCROLL_SPEED;
+                newOffset[0] = self.offset[0] - mouseWheelMove[0] * SCROLL_SPEED;
             }
             if (canScrollY) {
-                newOffset[1] = self.offset[1] + mouseWheelMove[1] * SCROLL_SPEED;
+                newOffset[1] = self.offset[1] - mouseWheelMove[1] * SCROLL_SPEED;
             }
             self.setAndClampOffset(contentSize, newOffset);
 
@@ -208,4 +208,12 @@ pub fn scrollDown(self: *@This()) void {
 pub fn getSize(opaquePtr: *const anyopaque) Vec2f {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
     return self.base.size;
+}
+
+// Get the size exclusive the visible scrollbars.
+pub fn getVisibleSize(self: *@This()) Vec2f {
+    return .{
+        @max(0, self.base.size[0] - @as(f32, if (self.scrollbarY.visible) SCROLLBAR_SIZE else 0)),
+        @max(0, self.base.size[1] - @as(f32, if (self.scrollbarX.visible) SCROLLBAR_SIZE else 0)),
+    };
 }
