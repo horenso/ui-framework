@@ -147,37 +147,39 @@ pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const 
 
 fn onLeft(self: *@This()) void {
     if (self.cursor.col > 0) {
-        self.cursor.col -= 1;
+        self.setCursorCol(self.cursor.col - 1);
     } else if (self.currentLine.node.prev) |prevLine| {
-        self.cursor.row -= 1;
         self.currentLine = @fieldParentPtr("node", prevLine);
-        self.cursor.col = self.currentLine.data.items.len;
+        self.setCursor(self.cursor.row - 1, self.currentLine.data.items.len);
     }
 }
 
 fn onRight(self: *@This()) void {
     if (self.cursor.col < self.currentLine.data.items.len) {
-        self.cursor.col += 1;
+        self.setCursorCol(self.cursor.col + 1);
     } else if (self.currentLine.node.next) |nextLine| {
-        self.cursor.row += 1;
         self.currentLine = @fieldParentPtr("node", nextLine);
-        self.cursor.col = 0;
+        self.setCursor(self.cursor.row + 1, self.cursor.col);
     }
 }
 
 fn onUp(self: *@This()) void {
     if (self.currentLine.node.prev) |prevLine| {
-        self.cursor.row -= 1;
         self.currentLine = @fieldParentPtr("node", prevLine);
-        self.cursor.col = @min(self.currentLine.data.items.len, self.cursor.col);
+        self.setCursor(
+            self.cursor.row - 1,
+            @min(self.currentLine.data.items.len, self.cursor.col),
+        );
     }
 }
 
 fn onDown(self: *@This()) void {
     if (self.currentLine.node.next) |nextLine| {
-        self.cursor.row += 1;
         self.currentLine = @fieldParentPtr("node", nextLine);
-        self.cursor.col = @min(self.currentLine.data.items.len, self.cursor.col);
+        self.setCursor(
+            self.cursor.row + 1,
+            @min(self.currentLine.data.items.len, self.cursor.col),
+        );
     }
 }
 
@@ -188,8 +190,7 @@ fn onEnter(self: *@This()) !void {
     self.currentLine.data.shrinkAndFree(self.base.app.allocator, self.cursor.col);
     self.lines.insertAfter(&self.currentLine.node, &newLine.node);
     self.currentLine = newLine;
-    self.cursor.col = 0;
-    self.cursor.row += 1;
+    self.setCursor(self.cursor.row + 1, 0);
 }
 
 fn onBackspace(self: *@This()) !void {
@@ -200,8 +201,7 @@ fn onBackspace(self: *@This()) !void {
         self.lines.remove(&self.currentLine.node);
 
         const line: *LineData = @fieldParentPtr("node", prevLine);
-        self.cursor.col = line.data.items.len;
-        self.cursor.row -= 1;
+        self.setCursor(self.cursor.row - 1, line.data.items.len);
 
         try line.data.appendSlice(self.base.app.allocator, self.currentLine.data.items[0..]);
         self.currentLine.data.deinit(self.base.app.allocator);
@@ -237,17 +237,6 @@ pub fn deinit(opaquePtr: *anyopaque) void {
 pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     switch (event) {
-        .charEvent => |character| {
-            // var buffer: [4]u8 = std.mem.zeroes([4]u8);
-            // const encoded = std.unicode.utf8Encode(character, &buffer) catch unreachable;
-            // try self.codepoints.insertSlice(self.cursor.col, buffer[0..encoded]);
-            try self.currentLine.data.insert(self.base.app.allocator, self.cursor.col, character);
-            if (self.currentLine.data.items.len > self.longestLine.data.items.len) {
-                self.longestLine = self.currentLine;
-            }
-            self.cursor.col += 1;
-            return true;
-        },
         .keyEvent => |keyEvent| {
             switch (keyEvent.code) {
                 .left => self.onLeft(),
@@ -257,51 +246,65 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
                 .enter => try self.onEnter(),
                 .backspace => try self.onBackspace(),
                 .delete => try self.onDelete(),
-                else => return false,
+                else => {
+                    if (keyEvent.char != 0) {
+                        try self.currentLine.data.insert(self.base.app.allocator, self.cursor.col, keyEvent.char);
+                        if (self.currentLine.data.items.len > self.longestLine.data.items.len) {
+                            self.longestLine = self.currentLine;
+                        }
+                        self.setCursorCol(self.cursor.col + 1);
+                    } else {
+                        return false;
+                    }
+                },
             }
             return true;
         },
         .clickEvent => |clickEvent| {
             const clickPosFloat: Vec2f = .{ @floatFromInt(clickEvent.x), @floatFromInt(clickEvent.y) };
-            self.cursor.row = @intFromFloat(clickPosFloat[1] / (self.font.height + Font.SPACING));
-            self.cursor.col = @intFromFloat(@round(clickPosFloat[0] / (self.font.width + Font.SPACING)));
+
+            // This is the cell the user clicked on, now we need to figure out if it's within the text
+            const targetRow: usize = @intFromFloat(clickPosFloat[1] / (self.font.height + Font.SPACING));
+            const targetCol: usize = @intFromFloat(@round(clickPosFloat[0] / (self.font.width + Font.SPACING)));
 
             var currentNode = self.lines.first;
             var index: usize = 0;
             while (currentNode) |node| {
-                if (index == self.cursor.row) {
+                if (index == targetRow) {
                     self.currentLine = @fieldParentPtr("node", node);
                     break;
                 }
                 currentNode = node.next;
                 index += 1;
             }
-            self.cursor.col = @min(self.cursor.col, self.currentLine.data.items.len);
+            self.setCursor(
+                @min(targetRow, index),
+                @min(targetCol, self.currentLine.data.items.len),
+            );
+
+            std.log.debug("click {any} {any} {any}", .{ targetRow, targetCol, self.cursor });
+
             return true;
         },
         else => return false,
     }
 }
 
-pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
-    const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
+inline fn getMaxContentSizeInner(self: *const @This()) Vec2f {
     return .{
         @as(f32, @floatFromInt(self.longestLine.data.items.len)) * (self.font.width + Font.SPACING) + getCursorWidth(self.font.width),
         @as(f32, @floatFromInt(self.lines.len())) * self.font.height,
     };
 }
 
+pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
+    const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
+    return self.getMaxContentSizeInner();
+}
+
 pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     self.base.size = size;
-
-    self.cursor.x = (self.font.width + Font.SPACING) * @as(f32, @floatFromInt(self.cursor.col));
-    self.cursor.y = self.font.height * @as(f32, @floatFromInt(self.cursor.row));
-
-    self.scrollProxy.ensureVisible(
-        .{ self.cursor.x, self.cursor.y },
-        .{ self.cursor.width, self.font.height },
-    );
 }
 
 fn drawText(self: *const @This()) void {
@@ -332,9 +335,10 @@ fn drawText(self: *const @This()) void {
         }
 
         if (index == self.cursor.row) {
+            const maxContentSize = self.getMaxContentSizeInner();
             rl.drawRectangleV(
                 .{ .x = x, .y = y },
-                .{ .x = self.base.size[0], .y = self.font.height },
+                .{ .x = maxContentSize[0] + 100, .y = self.font.height },
                 rl.Color.init(200, 200, 100, 100),
             );
         }
@@ -385,4 +389,25 @@ pub fn getOffset(opaquePtr: *const anyopaque) Vec2f {
 pub fn setOffset(opaquePtr: *anyopaque, offset: Vec2f) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     self.offset = offset;
+}
+
+pub fn setCursorRow(self: *@This(), row: usize) void {
+    self.setCursor(self, row, self.cursor.col);
+}
+
+pub fn setCursorCol(self: *@This(), col: usize) void {
+    self.setCursor(self.cursor.row, col);
+}
+
+pub fn setCursor(self: *@This(), row: usize, col: usize) void {
+    self.cursor.row = row;
+    self.cursor.col = col;
+
+    self.cursor.x = (self.font.width + Font.SPACING) * @as(f32, @floatFromInt(self.cursor.col));
+    self.cursor.y = self.font.height * @as(f32, @floatFromInt(self.cursor.row));
+
+    self.scrollProxy.ensureVisible(
+        .{ self.cursor.x, self.cursor.y },
+        .{ self.cursor.width, self.font.height },
+    );
 }

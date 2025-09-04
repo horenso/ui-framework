@@ -3,6 +3,8 @@ const Vec2f = vec.Vec2f;
 
 pub const KeyCode = enum {
     // zig fmt: off
+    unknown,
+
     a, b, c, d, e, f, g, h, i, j, k, l, m, 
     n, o, p, q, r, s, t, u, v, w, x, y, z,
 
@@ -11,15 +13,19 @@ pub const KeyCode = enum {
 
     right, left, down, up, period,
     comma, space, escape, enter, tab,
-    backspace, insert, delete, plus, minus
+    backspace, insert, delete, plus, minus,
     // zig fmt: on
 };
 
 pub const KeyEvent = struct {
     code: KeyCode,
+    char: ?u21,
     ctrl: bool,
     shift: bool,
+    alt: bool,
+    type: enum { Down, Pressed, Up },
 };
+
 pub const ClickEvent = struct {
     x: i32,
     y: i32,
@@ -38,5 +44,4 @@ pub const Event = union(enum) {
     clickEvent: ClickEvent,
     mouseWheelEvent: Vec2f,
     keyEvent: KeyEvent,
-    charEvent: CharEvent,
 };

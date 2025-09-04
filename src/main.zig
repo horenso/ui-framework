@@ -43,7 +43,6 @@ pub fn main() anyerror!void {
     }
 
     while (!app.shouldClose()) {
-        app.keyboardInputMode = .Character;
         Application.layout(&scrollContainerWidget);
         try app.draw(&scrollContainerWidget);
         try app.pollEvents();

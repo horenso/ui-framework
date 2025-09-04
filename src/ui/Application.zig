@@ -23,12 +23,6 @@ const InputState = struct {
     rightMouseDown: bool = false,
 };
 
-const KeyboardInputMode = enum {
-    Key,
-    Character,
-};
-
-keyboardInputMode: KeyboardInputMode = .Key,
 inputState: InputState = InputState{},
 inputQueue: std.ArrayList(Event),
 allocator: std.mem.Allocator,
@@ -76,68 +70,77 @@ pub fn shouldClose(self: *@This()) bool {
     return rl.windowShouldClose();
 }
 
-fn pollKey(self: *@This()) !void {
-    const key = rl.getKeyPressed();
-    const keycode: KeyCode = switch (key) {
-        .null => return,
+fn pollKeys(self: *@This()) !void {
+    while (true) {
+        const key = rl.getKeyPressed();
+        const keycode: KeyCode = switch (key) {
+            .null => return,
 
-        .a => .a,
-        .b => .b,
-        .c => .c,
-        .d => .d,
-        .e => .e,
-        .f => .f,
-        .g => .g,
-        .h => .h,
-        .i => .i,
-        .j => .j,
-        .k => .k,
-        .l => .l,
-        .m => .m,
-        .n => .n,
-        .o => .o,
-        .p => .p,
-        .q => .q,
-        .r => .r,
-        .s => .s,
-        .t => .t,
-        .u => .u,
-        .v => .v,
-        .w => .w,
-        .x => .x,
-        .y => .y,
-        .z => .z,
+            .a => .a,
+            .b => .b,
+            .c => .c,
+            .d => .d,
+            .e => .e,
+            .f => .f,
+            .g => .g,
+            .h => .h,
+            .i => .i,
+            .j => .j,
+            .k => .k,
+            .l => .l,
+            .m => .m,
+            .n => .n,
+            .o => .o,
+            .p => .p,
+            .q => .q,
+            .r => .r,
+            .s => .s,
+            .t => .t,
+            .u => .u,
+            .v => .v,
+            .w => .w,
+            .x => .x,
+            .y => .y,
+            .z => .z,
 
-        .zero => .num0,
-        .one => .num1,
-        .two => .num2,
-        .three => .num3,
-        .four => .num4,
-        .five => .num5,
-        .six => .num6,
-        .seven => .num7,
-        .eight => .num8,
-        .nine => .num9,
+            .zero => .num0,
+            .one => .num1,
+            .two => .num2,
+            .three => .num3,
+            .four => .num4,
+            .five => .num5,
+            .six => .num6,
+            .seven => .num7,
+            .eight => .num8,
+            .nine => .num9,
 
-        .left => .left,
-        .right => .right,
-        .up => .up,
-        .down => .down,
+            .left => .left,
+            .right => .right,
+            .up => .up,
+            .down => .down,
 
-        .backspace => .backspace,
-        .delete => .delete,
-        .space => .space,
-        .enter => .enter,
+            .backspace => .backspace,
+            .delete => .delete,
+            .space => .space,
+            .enter => .enter,
 
-        .period => .period,
-        .comma => .comma,
-        else => return,
-    };
-    try self.inputQueue.append(self.allocator, .{ .keyEvent = .{
-        .code = keycode,
-        .ctrl = rl.isKeyDown(rl.KeyboardKey.left_control) or rl.isKeyDown(rl.KeyboardKey.right_control),
-        .shift = rl.isKeyDown(rl.KeyboardKey.left_shift) or rl.isKeyDown(rl.KeyboardKey.right_shift),
-    } });
+            .period => .period,
+            .comma => .comma,
+            else => break,
+        };
+
+        const ctrl = rl.isKeyDown(rl.KeyboardKey.left_control) or rl.isKeyDown(rl.KeyboardKey.right_control);
+        const shift = rl.isKeyDown(rl.KeyboardKey.left_shift) or rl.isKeyDown(rl.KeyboardKey.right_shift);
+        const alt = rl.isKeyDown(rl.KeyboardKey.left_alt) or rl.isKeyDown(rl.KeyboardKey.right_alt);
+
+        try self.inputQueue.append(self.allocator, .{ .keyEvent = .{
+            .code = keycode,
+            .char = @bitCast(rl.getCharPressed()),
+            .ctrl = ctrl,
+            .shift = shift,
+            .alt = alt,
+        } });
+    }
 }
 
 pub fn pollEvents(self: *@This()) !void {
@@ -176,16 +179,5 @@ pub fn pollEvents(self: *@This()) !void {
     }
 
     // keyboard:
-    if (self.keyboardInputMode == .Character) {
-        const charPressed: u32 = @intCast(rl.getCharPressed());
-        if (charPressed != 0) {
-            _ = rl.getKeyPressed();
-            try self.inputQueue.append(self.allocator, .{ .charEvent = charPressed });
-        } else {
-            try pollKey(self);
-            // const charScalar: u21 = @truncate(charPressed);
-        }
-    } else {
-        try pollKey(self);
-    }
+    try pollKeys(self);
 }

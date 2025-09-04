@@ -18,10 +18,10 @@ const Scrollbar = struct {
 
 const SCROLL_SPEED = 40.0;
 const SCROLL_SPEED_VEC: Vec2f = @splat(SCROLL_SPEED);
-const SCROLLBAR_SIZE = 20.0;
+const SCROLLBAR_SIZE = 16.0;
 
 const SCROLLBAR_BACKGROUND_COLOR = rl.Color.init(0, 0, 0, 40);
-const SCROLLBAR_FOREGROUND_COLOR = rl.Color.init(0, 0, 0, 100);
+const SCROLLBAR_FOREGROUND_COLOR = rl.Color.init(0, 0, 0, 200);
 
 base: Widget.Base,
 child: Widget,
@@ -107,27 +107,39 @@ pub fn draw(opaquePtr: *const anyopaque) !void {
     }
 
     if (self.scrollbarY.visible) {
-        rl.drawRectangleV(
-            .{ .x = self.base.size[0] - SCROLLBAR_SIZE, .y = 0 },
-            .{ .x = SCROLLBAR_SIZE, .y = self.scrollbarY.length },
-            SCROLLBAR_BACKGROUND_COLOR,
-        );
-        rl.drawRectangleV(
-            .{ .x = self.base.size[0] - SCROLLBAR_SIZE, .y = self.scrollbarY.thumbPos },
-            .{ .x = SCROLLBAR_SIZE, .y = self.scrollbarY.thumbLength },
+        // rl.drawRectangleV(
+        //     .{ .x = self.base.size[0] - SCROLLBAR_SIZE, .y = 0 },
+        //     .{ .x = SCROLLBAR_SIZE, .y = self.scrollbarY.length },
+        //     SCROLLBAR_BACKGROUND_COLOR,
+        // );
+        rl.drawRectangleRounded(
+            .{
+                .x = self.base.size[0] - SCROLLBAR_SIZE,
+                .y = self.scrollbarY.thumbPos,
+                .width = SCROLLBAR_SIZE,
+                .height = self.scrollbarY.thumbLength,
+            },
+            50,
+            8,
             SCROLLBAR_FOREGROUND_COLOR,
         );
     }
 
     if (self.scrollbarX.visible) {
-        rl.drawRectangleV(
-            .{ .x = 0, .y = self.base.size[1] - SCROLLBAR_SIZE },
-            .{ .x = self.scrollbarX.length, .y = SCROLLBAR_SIZE },
-            SCROLLBAR_BACKGROUND_COLOR,
-        );
-        rl.drawRectangleV(
-            .{ .x = self.scrollbarX.thumbPos, .y = self.base.size[1] - SCROLLBAR_SIZE },
-            .{ .x = self.scrollbarX.thumbLength, .y = SCROLLBAR_SIZE },
+        // rl.drawRectangleV(
+        //     .{ .x = 0, .y = self.base.size[1] - SCROLLBAR_SIZE },
+        //     .{ .x = self.scrollbarX.length, .y = SCROLLBAR_SIZE },
+        //     SCROLLBAR_BACKGROUND_COLOR,
+        // );
+        rl.drawRectangleRounded(
+            .{
+                .x = self.scrollbarX.thumbPos,
+                .y = self.base.size[1] - SCROLLBAR_SIZE,
+                .width = self.scrollbarX.thumbLength,
+                .height = SCROLLBAR_SIZE,
+            },
+            50,
+            8,
             SCROLLBAR_FOREGROUND_COLOR,
         );
     }
