@@ -246,26 +246,23 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
                 .enter => try self.onEnter(),
                 .backspace => try self.onBackspace(),
                 .delete => try self.onDelete(),
-                else => {
-                    if (keyEvent.char != 0) {
-                        try self.currentLine.data.insert(self.base.app.allocator, self.cursor.col, keyEvent.char);
-                        if (self.currentLine.data.items.len > self.longestLine.data.items.len) {
-                            self.longestLine = self.currentLine;
-                        }
-                        self.setCursorCol(self.cursor.col + 1);
-                    } else {
-                        return false;
-                    }
-                },
+                else => return false,
             }
             return true;
         },
-        .clickEvent => |clickEvent| {
-            const clickPosFloat: Vec2f = .{ @floatFromInt(clickEvent.x), @floatFromInt(clickEvent.y) };
+        .textEvent => |textEvent| {
+            try self.currentLine.data.insert(self.base.app.allocator, self.cursor.col, textEvent.char);
+            if (self.currentLine.data.items.len > self.longestLine.data.items.len) {
+                self.longestLine = self.currentLine;
+            }
+            self.setCursorCol(self.cursor.col + 1);
 
+            return true;
+        },
+        .clickEvent => |clickEvent| {
             // This is the cell the user clicked on, now we need to figure out if it's within the text
-            const targetRow: usize = @intFromFloat(clickPosFloat[1] / (self.font.height + Font.SPACING));
-            const targetCol: usize = @intFromFloat(@round(clickPosFloat[0] / (self.font.width + Font.SPACING)));
+            const targetRow: usize = @intFromFloat(clickEvent.pos[1] / (self.font.height + Font.SPACING));
+            const targetCol: usize = @intFromFloat(@round(clickEvent.pos[0] / (self.font.width + Font.SPACING)));
 
             var currentNode = self.lines.first;
             var index: usize = 0;

@@ -169,8 +169,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
 
     const e = if (event == .clickEvent) blk: {
         var newClickEvent = event;
-        newClickEvent.clickEvent.x += @intFromFloat(self.offset[0]);
-        newClickEvent.clickEvent.y += @intFromFloat(self.offset[1]);
+        newClickEvent.clickEvent.pos += self.offset;
         break :blk newClickEvent;
     } else event;
     const childHandledEvent = try self.child.handleEvent(e);

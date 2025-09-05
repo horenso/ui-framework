@@ -1,12 +1,23 @@
 const std = @import("std");
+
+const sdl = @cImport({
+    @cDefine("SDL_DISABLE_OLD_NAMES", {});
+    @cInclude("SDL3/SDL.h");
+    @cInclude("SDL3/SDL_revision.h");
+    @cDefine("SDL_MAIN_HANDLED", {}); // We are providing our own entry point
+    @cInclude("SDL3/SDL_main.h");
+});
 const rl = @import("raylib");
 
-const FontManager = @import("FontManager.zig");
-const Widget = @import("./widget/Widget.zig");
-
+const ButtonType = event.ButtonType;
 const event = @import("event.zig");
 const Event = event.Event;
+const FontManager = @import("FontManager.zig");
 const KeyCode = event.KeyCode;
+const KeyEvent = event.KeyEvent;
+const KeyEventType = event.KeyEventType;
+const TextEvent = event.TextEvent;
+const Widget = @import("./widget/Widget.zig");
 
 const vec = @import("vec.zig");
 const Vec2f = vec.Vec2f;
@@ -23,161 +34,231 @@ const InputState = struct {
     rightMouseDown: bool = false,
 };
 
-inputState: InputState = InputState{},
-inputQueue: std.ArrayList(Event),
+const SdlState = struct {
+    window: *sdl.SDL_Window,
+    renderer: *sdl.SDL_Renderer,
+    cursor: ?*sdl.SDL_Cursor,
+};
+
+_shouldClose: bool = false,
+
+inputState: InputState = .{},
+inputQueue: std.ArrayList(Event) = .empty,
+sdlState: SdlState,
 allocator: std.mem.Allocator,
 
 fontManager: FontManager,
 
-pub fn init(comptime config: Config, allocator: std.mem.Allocator) !@This() {
-    rl.setConfigFlags(.{ .window_resizable = true });
-    rl.initWindow(config.width, config.height, config.title);
-    rl.setWindowMinSize(300, 300);
-    rl.setMouseCursor(.ibeam);
-    rl.setTargetFPS(60);
-    const app = @This(){
+pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFailure}!@This() {
+    if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO | sdl.SDL_2D_REN)) {
+        return error.SDLInitFailed;
+    }
+
+    // Tell SDL to create an OpenGL window
+    _ = sdl.SDL_GL_SetAttribute(sdl.SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    _ = sdl.SDL_GL_SetAttribute(sdl.SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    _ = sdl.SDL_GL_SetAttribute(sdl.SDL_GL_CONTEXT_PROFILE_MASK, sdl.SDL_GL_CONTEXT_PROFILE_CORE);
+
+    const window = sdl.SDL_CreateWindow(
+        config.title,
+        config.width,
+        config.height,
+        sdl.SDL_WINDOW_OPENGL | sdl.SDL_WINDOW_RESIZABLE,
+    ) orelse return error.InitFailure;
+
+    _ = sdl.SDL_SetWindowMinimumSize(window, 300, 300);
+    _ = sdl.SDL_StartTextInput(window);
+
+    const renderer = sdl.SDL_CreateRenderer(window, null) orelse {
+        std.log.err("SDL_CreateRenderer() Error: {s}", sdl.SDL_GetError());
+        error.InitFailure;
+    };
+
+    // Set the I-beam cursor
+    const cursor = sdl.SDL_CreateSystemCursor(sdl.SDL_SYSTEM_CURSOR_TEXT);
+    if (cursor != null) {
+        _ = sdl.SDL_SetCursor(cursor);
+    }
+
+    return .{
         .allocator = allocator,
         .inputQueue = .empty,
         .fontManager = FontManager.init(allocator),
+        .sdlState = .{
+            .window = window,
+            .renderer = renderer,
+            .cursor = cursor,
+        },
     };
-    return app;
 }
 
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.inputQueue.deinit(allocator);
     self.fontManager.deinit();
-    rl.closeWindow();
+
+    if (self.sdlState.cursor) |cursor| {
+        sdl.SDL_DestroyCursor(cursor);
+    }
+
+    sdl.SDL_DestroyRenderer(self.sdlState.renderer);
+    sdl.SDL_DestroyWindow(self.sdlState.window);
+
+    sdl.SDL_Quit();
 }
 
-pub fn layout(topWidget: *Widget) void {
-    const width: f32 = @floatFromInt(rl.getScreenWidth());
-    const height: f32 = @floatFromInt(rl.getScreenHeight());
-    topWidget.layout(.{ width, height });
+pub fn layout(self: *@This(), topWidget: *Widget) void {
+    var width: c_int = 0;
+    var height: c_int = 0;
+    if (!sdl.SDL_GetWindowSize(self.sdlState.window, &width, &height)) {
+        std.log.debug("Could not get window dimensions!", .{});
+    }
+    topWidget.layout(.{ @floatFromInt(width), @floatFromInt(height) });
 }
 
 pub fn draw(self: *@This(), topWidget: *Widget) !void {
-    _ = self;
-
     rl.beginDrawing();
     defer rl.endDrawing();
+    defer _ = sdl.SDL_GL_SwapWindow(self.sdlState.window);
 
     rl.clearBackground(.sky_blue);
     try topWidget.draw();
 }
 
 pub fn shouldClose(self: *@This()) bool {
-    _ = self;
-    return rl.windowShouldClose();
+    return self._shouldClose;
 }
 
-fn pollKeys(self: *@This()) !void {
-    while (true) {
-        const key = rl.getKeyPressed();
-        const keycode: KeyCode = switch (key) {
-            .null => return,
+fn handleKeyEvent(self: *@This(), sdlScancode: sdl.SDL_Scancode, sdlEventType: u32, modstate: u16) !void {
+    const keyCode: KeyCode = switch (sdlScancode) {
+        sdl.SDL_SCANCODE_A => .a,
+        sdl.SDL_SCANCODE_B => .b,
+        sdl.SDL_SCANCODE_C => .c,
+        sdl.SDL_SCANCODE_D => .d,
+        sdl.SDL_SCANCODE_E => .e,
+        sdl.SDL_SCANCODE_F => .f,
+        sdl.SDL_SCANCODE_G => .g,
+        sdl.SDL_SCANCODE_H => .h,
+        sdl.SDL_SCANCODE_I => .i,
+        sdl.SDL_SCANCODE_J => .j,
+        sdl.SDL_SCANCODE_K => .k,
+        sdl.SDL_SCANCODE_L => .l,
+        sdl.SDL_SCANCODE_M => .m,
+        sdl.SDL_SCANCODE_N => .n,
+        sdl.SDL_SCANCODE_O => .o,
+        sdl.SDL_SCANCODE_P => .p,
+        sdl.SDL_SCANCODE_Q => .q,
+        sdl.SDL_SCANCODE_R => .r,
+        sdl.SDL_SCANCODE_S => .s,
+        sdl.SDL_SCANCODE_T => .t,
+        sdl.SDL_SCANCODE_U => .u,
+        sdl.SDL_SCANCODE_V => .v,
+        sdl.SDL_SCANCODE_W => .w,
+        sdl.SDL_SCANCODE_X => .x,
+        sdl.SDL_SCANCODE_Y => .y,
+        sdl.SDL_SCANCODE_Z => .z,
 
-            .a => .a,
-            .b => .b,
-            .c => .c,
-            .d => .d,
-            .e => .e,
-            .f => .f,
-            .g => .g,
-            .h => .h,
-            .i => .i,
-            .j => .j,
-            .k => .k,
-            .l => .l,
-            .m => .m,
-            .n => .n,
-            .o => .o,
-            .p => .p,
-            .q => .q,
-            .r => .r,
-            .s => .s,
-            .t => .t,
-            .u => .u,
-            .v => .v,
-            .w => .w,
-            .x => .x,
-            .y => .y,
-            .z => .z,
+        sdl.SDL_SCANCODE_0 => .num0,
+        sdl.SDL_SCANCODE_1 => .num1,
+        sdl.SDL_SCANCODE_2 => .num2,
+        sdl.SDL_SCANCODE_3 => .num3,
+        sdl.SDL_SCANCODE_4 => .num4,
+        sdl.SDL_SCANCODE_5 => .num5,
+        sdl.SDL_SCANCODE_6 => .num6,
+        sdl.SDL_SCANCODE_7 => .num7,
+        sdl.SDL_SCANCODE_8 => .num8,
+        sdl.SDL_SCANCODE_9 => .num9,
 
-            .zero => .num0,
-            .one => .num1,
-            .two => .num2,
-            .three => .num3,
-            .four => .num4,
-            .five => .num5,
-            .six => .num6,
-            .seven => .num7,
-            .eight => .num8,
-            .nine => .num9,
+        sdl.SDL_SCANCODE_LEFT => .left,
+        sdl.SDL_SCANCODE_RIGHT => .right,
+        sdl.SDL_SCANCODE_UP => .up,
+        sdl.SDL_SCANCODE_DOWN => .down,
 
-            .left => .left,
-            .right => .right,
-            .up => .up,
-            .down => .down,
+        sdl.SDL_SCANCODE_BACKSPACE => .backspace,
+        sdl.SDL_SCANCODE_DELETE => .delete,
+        sdl.SDL_SCANCODE_SPACE => .space,
+        sdl.SDL_SCANCODE_RETURN => .enter,
+        sdl.SDL_SCANCODE_PERIOD => .period,
+        sdl.SDL_SCANCODE_COMMA => .comma,
 
-            .backspace => .backspace,
-            .delete => .delete,
-            .space => .space,
-            .enter => .enter,
+        else => .unknown,
+    };
 
-            .period => .period,
-            .comma => .comma,
-            else => break,
-        };
+    const ctrl = (modstate & sdl.SDL_KMOD_CTRL) != 0;
+    const shift = (modstate & sdl.SDL_KMOD_SHIFT) != 0;
+    const alt = (modstate & sdl.SDL_KMOD_ALT) != 0;
 
-        const ctrl = rl.isKeyDown(rl.KeyboardKey.left_control) or rl.isKeyDown(rl.KeyboardKey.right_control);
-        const shift = rl.isKeyDown(rl.KeyboardKey.left_shift) or rl.isKeyDown(rl.KeyboardKey.right_shift);
-        const alt = rl.isKeyDown(rl.KeyboardKey.left_alt) or rl.isKeyDown(rl.KeyboardKey.right_alt);
+    const eventType: KeyEventType = switch (sdlEventType) {
+        sdl.SDL_EVENT_KEY_DOWN => .down,
+        sdl.SDL_EVENT_KEY_UP => .up,
+        else => .pressed,
+    };
 
-        try self.inputQueue.append(self.allocator, .{ .keyEvent = .{
-            .code = keycode,
-            .char = @bitCast(rl.getCharPressed()),
+    var newEvent: Event = .{
+        .keyEvent = .{
+            .code = keyCode,
             .ctrl = ctrl,
             .shift = shift,
             .alt = alt,
-        } });
+            .type = eventType,
+        },
+    };
+
+    try self.inputQueue.append(self.allocator, newEvent);
+    if (eventType == .up) {
+        newEvent.keyEvent.type = .pressed;
+        try self.inputQueue.append(self.allocator, newEvent);
     }
 }
 
 pub fn pollEvents(self: *@This()) !void {
-    if (!self.inputState.leftMouseDown and rl.isMouseButtonDown(rl.MouseButton.left)) {
-        self.inputState.leftMouseDown = true;
+    var sdlEvent: sdl.SDL_Event = undefined;
+    while (sdl.SDL_WaitEvent(&sdlEvent)) {
+        switch (sdlEvent.type) {
+            sdl.SDL_EVENT_QUIT => {
+                self._shouldClose = true;
+            },
+            sdl.SDL_EVENT_KEY_DOWN, sdl.SDL_EVENT_KEY_UP => {
+                try self.handleKeyEvent(
+                    sdlEvent.key.scancode,
+                    sdlEvent.type,
+                    sdlEvent.key.mod,
+                );
+            },
+            sdl.SDL_EVENT_MOUSE_WHEEL => {
+                try self.inputQueue.append(self.allocator, .{
+                    .mouseWheelEvent = .{
+                        sdlEvent.wheel.x,
+                        sdlEvent.wheel.y,
+                    },
+                });
+            },
+            sdl.SDL_EVENT_MOUSE_BUTTON_DOWN => {
+                const btn: event.ButtonType = switch (sdlEvent.button.button) {
+                    sdl.SDL_BUTTON_LEFT => .left,
+                    sdl.SDL_BUTTON_MIDDLE => .middle,
+                    sdl.SDL_BUTTON_RIGHT => .right,
+                    else => continue,
+                };
+                try self.inputQueue.append(self.allocator, .{ .clickEvent = .{
+                    .pos = .{ sdlEvent.button.x, sdlEvent.button.y },
+                    .button = btn,
+                } });
+                self.inputState.leftMouseDown = (btn == .left);
+            },
+            sdl.SDL_EVENT_MOUSE_BUTTON_UP => {
+                if (sdlEvent.button.button == sdl.SDL_BUTTON_LEFT) {
+                    self.inputState.leftMouseDown = false;
+                }
+            },
+            sdl.SDL_EVENT_TEXT_INPUT => {
+                const cStringText = sdlEvent.text.text;
+                const utf8Viewer = try std.unicode.Utf8View.init(cStringText[0..std.mem.len(cStringText)]);
+                var it = utf8Viewer.iterator();
+                while (it.nextCodepoint()) |codepoint| {
+                    try self.inputQueue.append(self.allocator, .{ .textEvent = .{ .char = codepoint } });
+                }
+            },
+            else => {},
+        }
     }
-    if (self.inputState.leftMouseDown and rl.isMouseButtonUp(rl.MouseButton.left)) {
-        self.inputState.leftMouseDown = false;
-    }
-    const mouseWheelMove = rl.getMouseWheelMoveV();
-    if (mouseWheelMove.x != 0.0 or mouseWheelMove.y != 0.0) {
-        try self.inputQueue.append(self.allocator, .{ .mouseWheelEvent = .{
-            mouseWheelMove.x,
-            mouseWheelMove.y,
-        } });
-    }
-
-    if (rl.isMouseButtonPressed(.left)) {
-        try self.inputQueue.append(self.allocator, .{ .clickEvent = .{
-            .x = @intCast(rl.getMouseX()),
-            .y = @intCast(rl.getMouseY()),
-            .button = .left,
-        } });
-    } else if (rl.isMouseButtonPressed(.middle)) {
-        try self.inputQueue.append(self.allocator, .{ .clickEvent = .{
-            .x = @intCast(rl.getMouseX()),
-            .y = @intCast(rl.getMouseY()),
-            .button = .middle,
-        } });
-    } else if (rl.isMouseButtonPressed(.right)) {
-        try self.inputQueue.append(self.allocator, .{ .clickEvent = .{
-            .x = @intCast(rl.getMouseX()),
-            .y = @intCast(rl.getMouseY()),
-            .button = .right,
-        } });
-    }
-
-    // keyboard:
-    try pollKeys(self);
 }

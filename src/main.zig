@@ -43,7 +43,7 @@ pub fn main() anyerror!void {
     }
 
     while (!app.shouldClose()) {
-        Application.layout(&scrollContainerWidget);
+        app.layout(&scrollContainerWidget);
         try app.draw(&scrollContainerWidget);
         try app.pollEvents();
         while (app.inputQueue.pop()) |event| {

@@ -17,26 +17,30 @@ pub const KeyCode = enum {
     // zig fmt: on
 };
 
+pub const KeyEventType = enum { down, pressed, up };
+
 pub const KeyEvent = struct {
     code: KeyCode,
-    char: ?u21,
     ctrl: bool,
     shift: bool,
     alt: bool,
-    type: enum { Down, Pressed, Up },
+    type: KeyEventType,
+};
+
+pub const TextEvent = struct {
+    char: u32,
+};
+
+pub const ButtonType = enum {
+    left,
+    middle,
+    right,
 };
 
 pub const ClickEvent = struct {
-    x: i32,
-    y: i32,
-    button: enum {
-        left,
-        middle,
-        right,
-    },
+    pos: Vec2f,
+    button: ButtonType,
 };
-// Unicode character
-pub const CharEvent = u32;
 
 pub const Event = union(enum) {
     mouseEnterEvent: void,
@@ -44,4 +48,5 @@ pub const Event = union(enum) {
     clickEvent: ClickEvent,
     mouseWheelEvent: Vec2f,
     keyEvent: KeyEvent,
+    textEvent: TextEvent,
 };
