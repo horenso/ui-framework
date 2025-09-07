@@ -1,5 +1,4 @@
 const std = @import("std");
-const rl = @import("raylib");
 
 const Application = @import("ui/Application.zig");
 const TextInput = @import("ui/widget/TextInput.zig");
@@ -38,8 +37,13 @@ pub fn main() anyerror!void {
     var argsIt = std.process.args();
     _ = argsIt.next(); // Skip name of executable
     if (argsIt.next()) |firstArg| {
-        const text = rl.loadFileText(@ptrCast(firstArg));
-        try textInput.loadText(allocator, text[0..]);
+        const textFile = try std.fs.cwd().openFile(firstArg, .{ .mode = .read_only });
+
+        const buffer = try allocator.alloc(u8, @intCast(try textFile.getEndPos()));
+        defer allocator.free(buffer);
+
+        _ = try textFile.readAll(buffer);
+        try textInput.loadText(allocator, buffer);
     }
 
     while (!app.shouldClose()) {

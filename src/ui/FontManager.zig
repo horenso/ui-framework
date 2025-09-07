@@ -1,7 +1,13 @@
 const std = @import("std");
-const rl = @import("raylib");
+const tt = @import("truetype");
 
-const Font = @import("Font.zig");
+pub const Font = struct {
+    pub const SPACING = 0.0;
+
+    width: f32,
+    height: f32,
+    // font: tt.TrueType,
+};
 
 const Key = i32;
 
@@ -33,20 +39,31 @@ pub fn deinit(self: *@This()) void {
     self.cache.deinit();
 }
 
-pub fn getFont(self: *@This(), size: i32) Font {
-    const path = "res/VictorMonoAll/VictorMono-Medium.otf";
-    if (self.cache.get(size)) |font| {
-        return font;
-    }
+pub fn getFont(self: *@This(), allocator: std.mem.Allocator, size: i32) !Font {
+    _ = self;
+    _ = allocator;
+    _ = size;
+    unreachable;
+    // const path = "res/VictorMonoAll/VictorMono-Medium.otf";
 
-    const raylibFont = rl.loadFontEx(path, size, &charSet) catch @panic("font loading failed");
-    rl.setTextureFilter(raylibFont.texture, .bilinear);
-    const fontMeasurement = rl.measureTextEx(raylibFont, "A", @floatFromInt(size), Font.SPACING);
-    const font: Font = .{
-        .raylibFont = raylibFont,
-        .width = fontMeasurement.x,
-        .height = fontMeasurement.y,
-    };
-    self.cache.put(size, font) catch @panic("self.cache.put() failed");
-    return font;
+    // if (self.cache.get(size)) |font| {
+    //     return font;
+    // }
+
+    // const font_bytes = try std.fs.cwd().readFileAlloc(allocator, path, 10 * 1024 * 1024);
+    // defer allocator.free(font_bytes);
+
+    // const f = try tt.load(font_bytes);
+
+    // const idx = tt.codepointGlyphIndex('A') orelse return error.GlyphResolveError;
+    // const metrics = tt.glyphHMetrics(idx);
+
+    // const font: Font = .{
+    //     .tt = f,
+    //     .width = @floatFromInt(metrics.advance_width),
+    //     .height = @floatFromInt(size),
+    // };
+
+    // try self.cache.put(size, font);
+    // return font;
 }

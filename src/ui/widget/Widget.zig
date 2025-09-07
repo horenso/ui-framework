@@ -1,5 +1,6 @@
 const std = @import("std");
-const rl = @import("raylib");
+
+const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
 const Event = @import("../event.zig").Event;
@@ -42,13 +43,21 @@ pub fn layout(self: @This(), size: Vec2f) void {
 
 pub fn draw(self: @This()) anyerror!void {
     const size = self.getSize();
-    rl.beginScissorMode(
-        @intFromFloat(0),
-        @intFromFloat(0),
-        @intFromFloat(size[0]),
-        @intFromFloat(size[1]),
-    );
-    defer rl.endScissorMode();
+
+    _ = size;
+    // TODO: do clipping
+    // var rect: sdl.SDL_Rect = .{
+    //     .x = 0,
+    //     .y = 0,
+    //     .w = @intFromFloat(size[0]),
+    //     .h = @intFromFloat(size[1]),
+    // };
+
+    // if (sdl.SDL_SetRenderClipRect(@ptrCast(self), &rect) < 0) {
+    //     return error.SDL;
+    // }
+    // defer sdl.SDL_SetRenderClipRect(@ptrCast(self.renderer), null);
+
     try self.vtable.draw(self.ptr);
 }
 

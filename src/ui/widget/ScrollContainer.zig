@@ -1,7 +1,9 @@
 const std = @import("std");
-const rl = @import("raylib");
+
+const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
+const Color = @import("../Color.zig");
 const Event = @import("../event.zig").Event;
 const Widget = @import("./Widget.zig");
 
@@ -20,8 +22,8 @@ const SCROLL_SPEED = 40.0;
 const SCROLL_SPEED_VEC: Vec2f = @splat(SCROLL_SPEED);
 const SCROLLBAR_SIZE = 16.0;
 
-const SCROLLBAR_BACKGROUND_COLOR = rl.Color.init(0, 0, 0, 40);
-const SCROLLBAR_FOREGROUND_COLOR = rl.Color.init(0, 0, 0, 200);
+const SCROLLBAR_BACKGROUND_COLOR = Color.init(0, 0, 0, 40);
+const SCROLLBAR_FOREGROUND_COLOR = Color.init(0, 0, 0, 200);
 
 base: Widget.Base,
 child: Widget,
@@ -94,54 +96,54 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
 pub fn draw(opaquePtr: *const anyopaque) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
+    const renderer = self.base.app.sdlState.renderer;
+    // Draw child content with offset (camera simulation)
     {
-        const camera = rl.Camera2D{
-            .offset = .{ .x = -self.offset[0], .y = -self.offset[1] },
-            .target = .{ .x = 0, .y = 0 },
-            .rotation = 0.0,
-            .zoom = 1.0,
+        var prevViewport: sdl.SDL_Rect = undefined;
+        defer _ = sdl.SDL_GetRenderViewport(@ptrCast(renderer), &prevViewport);
+
+        const offsetRect: sdl.SDL_Rect = .{
+            .x = @intFromFloat(-self.offset[0]),
+            .y = @intFromFloat(-self.offset[1]),
+            .w = @intFromFloat(self.base.size[0]),
+            .h = @intFromFloat(self.base.size[1]),
         };
-        camera.begin();
-        defer camera.end();
+        _ = sdl.SDL_SetRenderViewport(@ptrCast(renderer), &offsetRect);
         try self.child.draw();
     }
 
     if (self.scrollbarY.visible) {
-        // rl.drawRectangleV(
-        //     .{ .x = self.base.size[0] - SCROLLBAR_SIZE, .y = 0 },
-        //     .{ .x = SCROLLBAR_SIZE, .y = self.scrollbarY.length },
-        //     SCROLLBAR_BACKGROUND_COLOR,
-        // );
-        rl.drawRectangleRounded(
-            .{
-                .x = self.base.size[0] - SCROLLBAR_SIZE,
-                .y = self.scrollbarY.thumbPos,
-                .width = SCROLLBAR_SIZE,
-                .height = self.scrollbarY.thumbLength,
-            },
-            50,
-            8,
-            SCROLLBAR_FOREGROUND_COLOR,
+        const rect: sdl.SDL_FRect = .{
+            .x = self.base.size[0] - SCROLLBAR_SIZE,
+            .y = self.scrollbarY.thumbPos,
+            .w = SCROLLBAR_SIZE,
+            .h = self.scrollbarY.thumbLength,
+        };
+        _ = sdl.SDL_SetRenderDrawColor(
+            @ptrCast(renderer),
+            SCROLLBAR_FOREGROUND_COLOR.r,
+            SCROLLBAR_FOREGROUND_COLOR.g,
+            SCROLLBAR_FOREGROUND_COLOR.b,
+            SCROLLBAR_FOREGROUND_COLOR.a,
         );
+        _ = sdl.SDL_RenderFillRect(@ptrCast(renderer), &rect);
     }
 
     if (self.scrollbarX.visible) {
-        // rl.drawRectangleV(
-        //     .{ .x = 0, .y = self.base.size[1] - SCROLLBAR_SIZE },
-        //     .{ .x = self.scrollbarX.length, .y = SCROLLBAR_SIZE },
-        //     SCROLLBAR_BACKGROUND_COLOR,
-        // );
-        rl.drawRectangleRounded(
-            .{
-                .x = self.scrollbarX.thumbPos,
-                .y = self.base.size[1] - SCROLLBAR_SIZE,
-                .width = self.scrollbarX.thumbLength,
-                .height = SCROLLBAR_SIZE,
-            },
-            50,
-            8,
-            SCROLLBAR_FOREGROUND_COLOR,
+        const rect: sdl.SDL_FRect = .{
+            .x = self.scrollbarX.thumbPos,
+            .y = self.base.size[1] - SCROLLBAR_SIZE,
+            .w = self.scrollbarX.thumbLength,
+            .h = SCROLLBAR_SIZE,
+        };
+        _ = sdl.SDL_SetRenderDrawColor(
+            @ptrCast(renderer),
+            SCROLLBAR_FOREGROUND_COLOR.r,
+            SCROLLBAR_FOREGROUND_COLOR.g,
+            SCROLLBAR_FOREGROUND_COLOR.b,
+            SCROLLBAR_FOREGROUND_COLOR.a,
         );
+        _ = sdl.SDL_RenderFillRect(@ptrCast(renderer), &rect);
     }
 }
 

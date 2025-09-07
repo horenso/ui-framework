@@ -3,7 +3,7 @@ const rl = @import("raylib");
 
 const Application = @import("../Application.zig");
 const Event = @import("../event.zig").Event;
-const Font = @import("../Font.zig");
+const Font = FontManager.Font;
 const FontManager = @import("../FontManager.zig");
 const Widget = @import("./Widget.zig");
 const ScrollContainer = @import("./ScrollContainer.zig");

@@ -7,7 +7,6 @@ const sdl = @cImport({
     @cDefine("SDL_MAIN_HANDLED", {}); // We are providing our own entry point
     @cInclude("SDL3/SDL_main.h");
 });
-const rl = @import("raylib");
 
 const ButtonType = event.ButtonType;
 const event = @import("event.zig");
@@ -50,8 +49,8 @@ allocator: std.mem.Allocator,
 fontManager: FontManager,
 
 pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFailure}!@This() {
-    if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO | sdl.SDL_2D_REN)) {
-        return error.SDLInitFailed;
+    if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
+        return error.InitFailure;
     }
 
     // Tell SDL to create an OpenGL window
@@ -70,8 +69,8 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
     _ = sdl.SDL_StartTextInput(window);
 
     const renderer = sdl.SDL_CreateRenderer(window, null) orelse {
-        std.log.err("SDL_CreateRenderer() Error: {s}", sdl.SDL_GetError());
-        error.InitFailure;
+        std.log.err("SDL_CreateRenderer() Error: {s}", .{sdl.SDL_GetError()});
+        return error.InitFailure;
     };
 
     // Set the I-beam cursor
@@ -116,12 +115,12 @@ pub fn layout(self: *@This(), topWidget: *Widget) void {
 }
 
 pub fn draw(self: *@This(), topWidget: *Widget) !void {
-    rl.beginDrawing();
-    defer rl.endDrawing();
-    defer _ = sdl.SDL_GL_SwapWindow(self.sdlState.window);
+    _ = sdl.SDL_SetRenderDrawColor(self.sdlState.renderer, 0, 0, 0, 0);
+    _ = sdl.SDL_RenderClear(self.sdlState.renderer);
 
-    rl.clearBackground(.sky_blue);
     try topWidget.draw();
+
+    _ = sdl.SDL_GL_SwapWindow(self.sdlState.window);
 }
 
 pub fn shouldClose(self: *@This()) bool {

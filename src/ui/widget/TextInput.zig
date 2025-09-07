@@ -1,9 +1,11 @@
 const std = @import("std");
-const rl = @import("raylib");
+
+const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
+const Color = @import("../Color.zig");
 const Event = @import("../event.zig").Event;
-const Font = @import("../Font.zig");
+const Font = FontManager.Font;
 const FontManager = @import("../FontManager.zig");
 const Widget = @import("./Widget.zig");
 const ScrollContainer = @import("./ScrollContainer.zig");
@@ -15,7 +17,7 @@ const Vec4f = vec.Vec4f;
 const Vec2i = vec.Vec2i;
 
 const INITIAL_FONT_WIDTH = 30;
-const CURSOR_COLOR = rl.Color.init(0, 0, 0, 160);
+const CURSOR_COLOR = Color.init(0, 0, 0, 160);
 
 const DEBUG_PRINT_CHAR_OUTLINE = false;
 
@@ -51,7 +53,7 @@ pub fn init(app: *Application, fontManager: *FontManager) !@This() {
     emptyLine.data = .empty;
     lines.append(&emptyLine.node);
 
-    const font = fontManager.getFont(INITIAL_FONT_WIDTH);
+    const font = try fontManager.getFont(app.allocator, INITIAL_FONT_WIDTH);
 
     return .{
         .base = .{ .app = app },
@@ -115,7 +117,7 @@ fn makeNewLine(self: *@This()) !*LineData {
 }
 
 pub fn changeFontSize(self: *@This(), fontManager: *FontManager, fontSize: i32) void {
-    self.font = fontManager.getFont(fontSize);
+    self.font = fontManager.getFont(self.base.app.allocator, fontSize) catch unreachable;
     self.cursor.width = getCursorWidth(self.font.width);
 }
 
@@ -308,46 +310,53 @@ fn drawText(self: *const @This()) void {
     var it = self.lines.first;
     var index: usize = 0;
 
-    const stepX: f32 = self.font.width + Font.SPACING;
-
     while (it) |currentNode| {
         const lineData: *LineData = @fieldParentPtr("node", currentNode);
         const codepoints = lineData.data.items;
+        _ = codepoints;
 
         const indexFloat: f32 = @floatFromInt(index);
         const y: f32 = indexFloat * self.font.height;
-        var x: f32 = 0;
+        const x: f32 = 0;
 
         if (DEBUG_PRINT_CHAR_OUTLINE) {
-            for (codepoints) |_| {
-                rl.drawRectangleLines(
-                    @intFromFloat(x),
-                    @intFromFloat(y),
-                    @intFromFloat(self.font.width),
-                    @intFromFloat(self.font.height),
-                    rl.Color.green,
-                );
-                x += stepX;
-            }
+            // for (codepoints) |_| {
+            //     rl.drawRectangleLines(
+            //         @intFromFloat(x),
+            //         @intFromFloat(y),
+            //         @intFromFloat(self.font.width),
+            //         @intFromFloat(self.font.height),
+            //         Color.init(0, 255, 0, 255),
+            //     );
+            //     x += stepX;
+            // }
         }
 
         if (index == self.cursor.row) {
             const maxContentSize = self.getMaxContentSizeInner();
-            rl.drawRectangleV(
-                .{ .x = x, .y = y },
-                .{ .x = maxContentSize[0] + 100, .y = self.font.height },
-                rl.Color.init(200, 200, 100, 100),
-            );
+
+            var rect: sdl.SDL_FRect = .{
+                .x = x,
+                .y = y,
+                .w = maxContentSize[0] + 100,
+                .h = self.font.height,
+            };
+
+            // Set highlight color (200, 200, 100, 100)
+            const renderer = self.base.app.sdlState.renderer;
+            _ = sdl.SDL_SetRenderDrawBlendMode(@ptrCast(renderer), sdl.SDL_BLENDMODE_BLEND);
+            _ = sdl.SDL_SetRenderDrawColor(@ptrCast(renderer), 200, 200, 100, 100);
+            _ = sdl.SDL_RenderFillRect(@ptrCast(renderer), &rect);
         }
 
-        rl.drawTextCodepoints(
-            self.font.raylibFont,
-            @ptrCast(codepoints),
-            .{ .x = 0, .y = y },
-            self.font.height,
-            Font.SPACING,
-            .black,
-        );
+        // rl.drawTextCodepoints(
+        //     self.font.font,
+        //     @ptrCast(codepoints),
+        //     .{ .x = 0, .y = y },
+        //     self.font.height,
+        //     Font.SPACING,
+        //     .black,
+        // );
 
         it = currentNode.next;
         index += 1;
@@ -360,17 +369,17 @@ fn getCursorWidth(fontWidth: f32) f32 {
 }
 
 pub fn draw(opaquePtr: *const anyopaque) !void {
-    rl.clearBackground(rl.Color.white);
+    // rl.clearBackground(rl.Color.white);
 
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
     self.drawText();
 
-    rl.drawRectangleV(
-        .{ .x = self.cursor.x, .y = self.cursor.y },
-        .{ .x = self.cursor.width, .y = self.font.height },
-        CURSOR_COLOR,
-    );
+    // rl.drawRectangleV(
+    //     .{ .x = self.cursor.x, .y = self.cursor.y },
+    //     .{ .x = self.cursor.width, .y = self.font.height },
+    //     CURSOR_COLOR,
+    // );
 }
 
 pub fn getSize(opaquePtr: *const anyopaque) Vec2f {
