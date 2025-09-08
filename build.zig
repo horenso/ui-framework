@@ -4,6 +4,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const exe_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const sdl_dep = b.dependency("sdl", .{
         .target = target,
         .optimize = optimize,
@@ -16,25 +22,19 @@ pub fn build(b: *std.Build) void {
         //.install_build_config_h = false,
     });
     const sdl_artifact = sdl_dep.artifact("SDL3");
+    exe_mod.linkLibrary(sdl_artifact);
 
-    const truetype_dep = b.dependency("TrueType", .{
+    const freetype_dep = b.dependency("freetype", .{
         .target = target,
         .optimize = optimize,
     });
-
-    const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    const freetype_artifact = freetype_dep.artifact("freetype");
+    exe_mod.linkLibrary(freetype_artifact);
 
     const exe = b.addExecutable(.{
         .name = "ui_framework",
         .root_module = exe_mod,
     });
-
-    exe_mod.linkLibrary(sdl_artifact);
-    exe_mod.addImport("truetype", truetype_dep.module("TrueType"));
 
     b.installArtifact(exe);
 

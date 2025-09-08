@@ -5,7 +5,7 @@ const sdl = @import("../sdl.zig").sdl;
 const Application = @import("../Application.zig");
 const Color = @import("../Color.zig");
 const Event = @import("../event.zig").Event;
-const Font = FontManager.Font;
+const FontAtlas = FontManager.FontAtlas;
 const FontManager = @import("../FontManager.zig");
 const Widget = @import("./Widget.zig");
 const ScrollContainer = @import("./ScrollContainer.zig");
@@ -18,8 +18,6 @@ const Vec2i = vec.Vec2i;
 
 const INITIAL_FONT_WIDTH = 30;
 const CURSOR_COLOR = Color.init(0, 0, 0, 160);
-
-const DEBUG_PRINT_CHAR_OUTLINE = false;
 
 const LineData = struct {
     node: std.DoublyLinkedList.Node,
@@ -36,7 +34,7 @@ const Cursor = struct {
 
 base: Widget.Base,
 
-font: Font,
+fontAtlas: *FontAtlas,
 
 lines: std.DoublyLinkedList = .{},
 currentLine: *LineData,
@@ -53,15 +51,19 @@ pub fn init(app: *Application, fontManager: *FontManager) !@This() {
     emptyLine.data = .empty;
     lines.append(&emptyLine.node);
 
-    const font = try fontManager.getFont(app.allocator, INITIAL_FONT_WIDTH);
+    const fontAtlas = try fontManager.getFontAtlas(
+        app.allocator,
+        app.sdlState.renderer,
+        INITIAL_FONT_WIDTH,
+    );
 
     return .{
         .base = .{ .app = app },
-        .font = font,
+        .fontAtlas = fontAtlas,
         .lines = lines,
         .currentLine = emptyLine,
         .longestLine = emptyLine,
-        .cursor = .{ .width = getCursorWidth(font.width) },
+        .cursor = .{ .width = getCursorWidth(fontAtlas.width) },
         .scrollProxy = .{ .scrollContainer = null },
     };
 }
@@ -117,8 +119,8 @@ fn makeNewLine(self: *@This()) !*LineData {
 }
 
 pub fn changeFontSize(self: *@This(), fontManager: *FontManager, fontSize: i32) void {
-    self.font = fontManager.getFont(self.base.app.allocator, fontSize) catch unreachable;
-    self.cursor.width = getCursorWidth(self.font.width);
+    self.fontAtlas = fontManager.getFontAtlas(self.base.app.allocator, self.base.app.sdlState.renderer, fontSize) catch unreachable;
+    self.cursor.width = getCursorWidth(self.fontAtlas.width);
 }
 
 pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const u8) !void {
@@ -263,8 +265,8 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
         },
         .clickEvent => |clickEvent| {
             // This is the cell the user clicked on, now we need to figure out if it's within the text
-            const targetRow: usize = @intFromFloat(clickEvent.pos[1] / (self.font.height + Font.SPACING));
-            const targetCol: usize = @intFromFloat(@round(clickEvent.pos[0] / (self.font.width + Font.SPACING)));
+            const targetRow: usize = @intFromFloat(clickEvent.pos[1] / (self.fontAtlas.height + FontManager.FONT_SPACING));
+            const targetCol: usize = @intFromFloat(@round(clickEvent.pos[0] / (self.fontAtlas.width + FontManager.FONT_SPACING)));
 
             var currentNode = self.lines.first;
             var index: usize = 0;
@@ -291,8 +293,8 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
 
 inline fn getMaxContentSizeInner(self: *const @This()) Vec2f {
     return .{
-        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * (self.font.width + Font.SPACING) + getCursorWidth(self.font.width),
-        @as(f32, @floatFromInt(self.lines.len())) * self.font.height,
+        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * (self.fontAtlas.width + FontManager.FONT_SPACING) + getCursorWidth(self.fontAtlas.width),
+        @as(f32, @floatFromInt(self.lines.len())) * self.fontAtlas.height,
     };
 }
 
@@ -313,24 +315,10 @@ fn drawText(self: *const @This()) void {
     while (it) |currentNode| {
         const lineData: *LineData = @fieldParentPtr("node", currentNode);
         const codepoints = lineData.data.items;
-        _ = codepoints;
 
         const indexFloat: f32 = @floatFromInt(index);
-        const y: f32 = indexFloat * self.font.height;
+        const y: f32 = indexFloat * self.fontAtlas.height;
         const x: f32 = 0;
-
-        if (DEBUG_PRINT_CHAR_OUTLINE) {
-            // for (codepoints) |_| {
-            //     rl.drawRectangleLines(
-            //         @intFromFloat(x),
-            //         @intFromFloat(y),
-            //         @intFromFloat(self.font.width),
-            //         @intFromFloat(self.font.height),
-            //         Color.init(0, 255, 0, 255),
-            //     );
-            //     x += stepX;
-            // }
-        }
 
         if (index == self.cursor.row) {
             const maxContentSize = self.getMaxContentSizeInner();
@@ -339,7 +327,7 @@ fn drawText(self: *const @This()) void {
                 .x = x,
                 .y = y,
                 .w = maxContentSize[0] + 100,
-                .h = self.font.height,
+                .h = self.fontAtlas.height,
             };
 
             // Set highlight color (200, 200, 100, 100)
@@ -348,15 +336,31 @@ fn drawText(self: *const @This()) void {
             _ = sdl.SDL_SetRenderDrawColor(@ptrCast(renderer), 200, 200, 100, 100);
             _ = sdl.SDL_RenderFillRect(@ptrCast(renderer), &rect);
         }
+        var pen_x: f32 = 0;
+        for (codepoints) |cp| {
+            // TODO error handling
+            const glyph = self.fontAtlas.getGlyph(self.base.app.allocator, cp) catch unreachable;
 
-        // rl.drawTextCodepoints(
-        //     self.font.font,
-        //     @ptrCast(codepoints),
-        //     .{ .x = 0, .y = y },
-        //     self.font.height,
-        //     Font.SPACING,
-        //     .black,
-        // );
+            const tex_size: f32 = 1024;
+            const src_rect: sdl.SDL_FRect = .{
+                .x = glyph.uv[0] * tex_size,
+                .y = glyph.uv[1] * tex_size,
+                .w = @floatFromInt(glyph.size[0]),
+                .h = @floatFromInt(glyph.size[1]),
+            };
+
+            const dst_rect: sdl.SDL_FRect = .{
+                .x = pen_x + @as(f32, @floatFromInt(glyph.bearing[0])),
+                .y = y - @as(f32, @floatFromInt(glyph.bearing[1])) + self.fontAtlas.height,
+                .w = @floatFromInt(glyph.size[0]),
+                .h = @floatFromInt(glyph.size[1]),
+            };
+
+            const renderer = self.base.app.sdlState.renderer;
+            _ = sdl.SDL_RenderTexture(@ptrCast(renderer), self.fontAtlas.texture, &src_rect, &dst_rect);
+
+            pen_x += self.fontAtlas.width;
+        }
 
         it = currentNode.next;
         index += 1;
@@ -409,11 +413,11 @@ pub fn setCursor(self: *@This(), row: usize, col: usize) void {
     self.cursor.row = row;
     self.cursor.col = col;
 
-    self.cursor.x = (self.font.width + Font.SPACING) * @as(f32, @floatFromInt(self.cursor.col));
-    self.cursor.y = self.font.height * @as(f32, @floatFromInt(self.cursor.row));
+    self.cursor.x = (self.fontAtlas.width + FontManager.FONT_SPACING) * @as(f32, @floatFromInt(self.cursor.col));
+    self.cursor.y = self.fontAtlas.height * @as(f32, @floatFromInt(self.cursor.row));
 
     self.scrollProxy.ensureVisible(
         .{ self.cursor.x, self.cursor.y },
-        .{ self.cursor.width, self.font.height },
+        .{ self.cursor.width, self.fontAtlas.height },
     );
 }

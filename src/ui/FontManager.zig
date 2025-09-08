@@ -1,17 +1,89 @@
 const std = @import("std");
-const tt = @import("truetype");
 
-pub const Font = struct {
-    pub const SPACING = 0.0;
+const sdl = @import("sdl.zig").sdl;
+
+const freetype = @cImport({
+    @cInclude("ft2build.h");
+    @cInclude("freetype/freetype.h");
+});
+
+const vec = @import("./vec.zig");
+const Vec2f = vec.Vec2f;
+const Vec4f = vec.Vec4f;
+const Vec2i = vec.Vec2i;
+
+pub const GlyphInfo = struct {
+    uv: Vec4f,
+    size: [2]i32, // glyph bitmap size
+    bearing: [2]i32, // left/top offsets
+    advance: i32, // advance.x (in 1/64 pixels)
+
+};
+
+pub const FontAtlas = struct {
+    // For now we always give the one pointer to the same font face
+    // later we need a cache for the fontFace and a separate one for the size
+    fontFace: *freetype.FT_FaceRec,
+    texture: *sdl.SDL_Texture,
+    glyphs: std.AutoHashMapUnmanaged(u32, GlyphInfo),
+    nextX: i32,
+    nextY: i32,
+    rowHeight: i32,
 
     width: f32,
     height: f32,
-    // font: tt.TrueType,
+
+    pub fn getGlyph(atlas: *FontAtlas, allocator: std.mem.Allocator, codepoint: u32) !GlyphInfo {
+        if (atlas.glyphs.get(codepoint)) |info| return info;
+
+        const err = freetype.FT_Load_Char(atlas.fontFace, codepoint, freetype.FT_LOAD_RENDER);
+        if (err != 0) return error.FreetypeLoadError;
+
+        const slot = atlas.fontFace.*.glyph;
+        const bmp = slot.*.bitmap;
+
+        // Pack into atlas
+        if (atlas.nextX + @as(i32, @intCast(bmp.width)) > 1024) {
+            atlas.nextX = 0;
+            atlas.nextY += atlas.rowHeight;
+            atlas.rowHeight = 0;
+        }
+
+        const dst_rect = sdl.SDL_Rect{
+            .x = atlas.nextX,
+            .y = atlas.nextY,
+            .w = @intCast(bmp.width),
+            .h = @intCast(bmp.rows),
+        };
+
+        _ = sdl.SDL_UpdateTexture(atlas.texture, &dst_rect, bmp.buffer, bmp.pitch);
+
+        const uv: Vec4f = .{
+            @as(f32, @floatFromInt(dst_rect.x)) / 1024.0,
+            @as(f32, @floatFromInt(dst_rect.y)) / 1024.0,
+            @as(f32, @floatFromInt(dst_rect.x + dst_rect.w)) / 1024.0,
+            @as(f32, @floatFromInt(dst_rect.y + dst_rect.h)) / 1024.0,
+        };
+
+        const info: GlyphInfo = .{
+            .uv = uv,
+            .size = .{ @intCast(bmp.width), @intCast(bmp.rows) },
+            .bearing = .{ slot.*.bitmap_left, slot.*.bitmap_top },
+            .advance = @intCast(slot.*.advance.x),
+        };
+        try atlas.glyphs.put(allocator, codepoint, info);
+
+        atlas.nextX += @intCast(bmp.width);
+        if (bmp.rows > atlas.rowHeight) atlas.rowHeight = @intCast(bmp.rows);
+
+        return info;
+    }
 };
 
 const Key = i32;
 
-const CacheHashMap = std.AutoArrayHashMap(Key, Font);
+pub const FONT_SPACING = 0;
+const FONT_PATH = "res/VictorMonoAll/VictorMono-Medium.ttf";
 
 var charSet = blk: {
     const chars: []const u8 = " !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~" ++ "öüäÖÜÄßẞ";
@@ -29,41 +101,90 @@ var charSet = blk: {
     break :blk array;
 };
 
-cache: CacheHashMap,
+library: freetype.FT_Library,
+fontFace: *freetype.FT_FaceRec,
+cache: std.AutoArrayHashMap(Key, *FontAtlas),
 
-pub fn init(allocator: std.mem.Allocator) @This() {
-    return @This(){ .cache = CacheHashMap.init(allocator) };
+pub fn init(allocator: std.mem.Allocator) !@This() {
+    var library: freetype.FT_Library = undefined;
+    const initError = freetype.FT_Init_FreeType(&library);
+    if (initError != 0) {
+        return error.FreeTypeInitError;
+    }
+
+    var fontFace: freetype.FT_Face = undefined;
+    const fontFaceLoadingError = freetype.FT_New_Face(library, FONT_PATH, 0, &fontFace);
+    if (fontFaceLoadingError != 0) {
+        _ = freetype.FT_Done_FreeType(library);
+        return error.FontLoadingError;
+    }
+
+    return @This(){
+        .library = library,
+        .fontFace = fontFace,
+        .cache = .init(allocator),
+    };
 }
 
 pub fn deinit(self: *@This()) void {
     self.cache.deinit();
+    var err: c_int = 0;
+    err += freetype.FT_Done_Face(self.fontFace);
+    err += freetype.FT_Done_FreeType(self.library);
+
+    if (err != 0) {
+        std.log.debug("font uninit failed!", .{});
+    }
 }
 
-pub fn getFont(self: *@This(), allocator: std.mem.Allocator, size: i32) !Font {
-    _ = self;
-    _ = allocator;
-    _ = size;
-    unreachable;
-    // const path = "res/VictorMonoAll/VictorMono-Medium.otf";
+pub fn getFontAtlas(
+    self: *@This(),
+    allocator: std.mem.Allocator,
+    renderer: *sdl.SDL_Renderer,
+    size: i32,
+) !*FontAtlas {
+    if (self.cache.get(size)) |atlas| {
+        return atlas;
+    }
 
-    // if (self.cache.get(size)) |font| {
-    //     return font;
-    // }
+    // font face is global for now
+    // 0 here means the width is automatic
+    // TODO error handling
+    _ = freetype.FT_Set_Pixel_Sizes(self.fontFace, 0, @intCast(size));
 
-    // const font_bytes = try std.fs.cwd().readFileAlloc(allocator, path, 10 * 1024 * 1024);
-    // defer allocator.free(font_bytes);
+    // Create SDL texture atlas (RGBA or A8)
+    const texture = sdl.SDL_CreateTexture(
+        renderer,
+        sdl.SDL_PIXELFORMAT_RGBA32,
+        sdl.SDL_TEXTUREACCESS_STREAMING,
+        1024,
+        1024,
+    ) orelse return error.SDLError;
 
-    // const f = try tt.load(font_bytes);
+    // Measure the font
+    var width: f32 = 0;
+    var height: f32 = 0;
+    const err = freetype.FT_Load_Char(self.fontFace, 'M', freetype.FT_LOAD_RENDER);
+    if (err == 0) {
+        const slot = self.fontFace.*.glyph;
+        width = @floatFromInt(slot.*.advance.x >> 6);
+        height = @floatFromInt(slot.*.bitmap.rows);
+    } else {
+        return error.FontMeasureError;
+    }
 
-    // const idx = tt.codepointGlyphIndex('A') orelse return error.GlyphResolveError;
-    // const metrics = tt.glyphHMetrics(idx);
+    const atlas = try allocator.create(FontAtlas);
+    atlas.* = .{
+        .fontFace = self.fontFace,
+        .texture = texture,
+        .glyphs = .empty,
+        .nextX = 0,
+        .nextY = 0,
+        .rowHeight = 0,
+        .width = width,
+        .height = height,
+    };
+    try self.cache.put(size, atlas);
 
-    // const font: Font = .{
-    //     .tt = f,
-    //     .width = @floatFromInt(metrics.advance_width),
-    //     .height = @floatFromInt(size),
-    // };
-
-    // try self.cache.put(size, font);
-    // return font;
+    return atlas;
 }

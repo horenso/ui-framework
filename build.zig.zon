@@ -40,9 +40,9 @@
             .url = "git+https://github.com/castholm/SDL.git#b1913e7c31ad72ecfd3ab04aeac387027754cfaf",
             .hash = "sdl-0.3.0+3.2.22-7uIn9Pg3fwGG2IyIOPxxOSVe-75nUng9clt7tXGFLzMr",
         },
-        .TrueType = .{
-            .url = "git+https://codeberg.org/ssmid/TrueType#7543e2dca70267e8f09e37be00fbc0385138581d",
-            .hash = "TrueType-0.0.0-Ne-mWHIGAQBwHsiS9z_vbr1SkVZCkG01Vpzrs079dzIO",
+        .freetype = .{
+            .url = "git+https://github.com/david-vanderson/freetype#827f12fbf46511c679d722dc55ac123c3c2684fa",
+            .hash = "freetype-2.13.0-alzUkfmNqAAjowVUPRfgA-1i6Rj-bvigTeTytje2oxJt",
         },
     },
     .paths = .{

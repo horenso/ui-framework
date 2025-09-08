@@ -1,12 +1,6 @@
 const std = @import("std");
 
-const sdl = @cImport({
-    @cDefine("SDL_DISABLE_OLD_NAMES", {});
-    @cInclude("SDL3/SDL.h");
-    @cInclude("SDL3/SDL_revision.h");
-    @cDefine("SDL_MAIN_HANDLED", {}); // We are providing our own entry point
-    @cInclude("SDL3/SDL_main.h");
-});
+const sdl = @import("./sdl.zig").sdl;
 
 const ButtonType = event.ButtonType;
 const event = @import("event.zig");
@@ -82,7 +76,7 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
     return .{
         .allocator = allocator,
         .inputQueue = .empty,
-        .fontManager = FontManager.init(allocator),
+        .fontManager = FontManager.init(allocator) catch return error.InitFailure,
         .sdlState = .{
             .window = window,
             .renderer = renderer,
@@ -115,12 +109,12 @@ pub fn layout(self: *@This(), topWidget: *Widget) void {
 }
 
 pub fn draw(self: *@This(), topWidget: *Widget) !void {
-    _ = sdl.SDL_SetRenderDrawColor(self.sdlState.renderer, 0, 0, 0, 0);
+    _ = sdl.SDL_SetRenderDrawColor(self.sdlState.renderer, 255, 255, 255, 255);
     _ = sdl.SDL_RenderClear(self.sdlState.renderer);
 
     try topWidget.draw();
 
-    _ = sdl.SDL_GL_SwapWindow(self.sdlState.window);
+    _ = sdl.SDL_RenderPresent(self.sdlState.renderer);
 }
 
 pub fn shouldClose(self: *@This()) bool {
@@ -211,7 +205,7 @@ fn handleKeyEvent(self: *@This(), sdlScancode: sdl.SDL_Scancode, sdlEventType: u
 
 pub fn pollEvents(self: *@This()) !void {
     var sdlEvent: sdl.SDL_Event = undefined;
-    while (sdl.SDL_WaitEvent(&sdlEvent)) {
+    while (sdl.SDL_PollEvent(&sdlEvent)) {
         switch (sdlEvent.type) {
             sdl.SDL_EVENT_QUIT => {
                 self._shouldClose = true;
