@@ -198,9 +198,10 @@ fn onEnter(self: *@This()) !void {
 }
 
 fn onBackspace(self: *@This()) !void {
+    std.log.debug("onBackspace", .{});
     if (self.cursor.col > 0) {
-        self.cursor.col -= 1;
-        _ = self.currentLine.data.orderedRemove(self.cursor.col);
+        _ = self.currentLine.data.orderedRemove(self.cursor.col - 1);
+        self.setCursorCol(self.cursor.col - 1);
     } else if (self.currentLine.node.prev) |prevLine| {
         self.lines.remove(&self.currentLine.node);
 
@@ -242,6 +243,9 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     switch (event) {
         .keyEvent => |keyEvent| {
+            if (keyEvent.type != .down) {
+                return false;
+            }
             switch (keyEvent.code) {
                 .left => self.onLeft(),
                 .right => self.onRight(),
@@ -330,7 +334,6 @@ fn drawText(self: *const @This()) void {
                 .h = self.fontAtlas.height,
             };
 
-            // Set highlight color (200, 200, 100, 100)
             const renderer = self.base.app.sdlState.renderer;
             _ = sdl.SDL_SetRenderDrawBlendMode(@ptrCast(renderer), sdl.SDL_BLENDMODE_BLEND);
             _ = sdl.SDL_SetRenderDrawColor(@ptrCast(renderer), 200, 200, 100, 100);
@@ -357,7 +360,9 @@ fn drawText(self: *const @This()) void {
             };
 
             const renderer = self.base.app.sdlState.renderer;
+            _ = sdl.SDL_SetTextureColorMod(self.fontAtlas.texture, 0, 0, 0);
             _ = sdl.SDL_RenderTexture(@ptrCast(renderer), self.fontAtlas.texture, &src_rect, &dst_rect);
+            _ = sdl.SDL_SetTextureColorMod(self.fontAtlas.texture, 255, 255, 255);
 
             pen_x += self.fontAtlas.width;
         }
@@ -379,11 +384,19 @@ pub fn draw(opaquePtr: *const anyopaque) !void {
 
     self.drawText();
 
-    // rl.drawRectangleV(
-    //     .{ .x = self.cursor.x, .y = self.cursor.y },
-    //     .{ .x = self.cursor.width, .y = self.font.height },
-    //     CURSOR_COLOR,
-    // );
+    _ = sdl.SDL_SetRenderDrawColor(
+        self.base.app.sdlState.renderer,
+        CURSOR_COLOR.r,
+        CURSOR_COLOR.g,
+        CURSOR_COLOR.b,
+        CURSOR_COLOR.a,
+    );
+    _ = sdl.SDL_RenderFillRect(self.base.app.sdlState.renderer, &.{
+        .x = self.cursor.x,
+        .y = self.cursor.y,
+        .w = self.cursor.width,
+        .h = self.fontAtlas.height,
+    });
 }
 
 pub fn getSize(opaquePtr: *const anyopaque) Vec2f {
@@ -415,6 +428,8 @@ pub fn setCursor(self: *@This(), row: usize, col: usize) void {
 
     self.cursor.x = (self.fontAtlas.width + FontManager.FONT_SPACING) * @as(f32, @floatFromInt(self.cursor.col));
     self.cursor.y = self.fontAtlas.height * @as(f32, @floatFromInt(self.cursor.row));
+
+    std.log.debug("cursor{d}:{d}", .{ row, col });
 
     self.scrollProxy.ensureVisible(
         .{ self.cursor.x, self.cursor.y },

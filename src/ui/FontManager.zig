@@ -97,7 +97,7 @@ pub const FontAtlas = struct {
 
 const Key = i32;
 
-pub const FONT_SPACING = 0;
+pub const FONT_SPACING = 4.0;
 const FONT_PATH = "res/VictorMonoAll/VictorMono-Medium.ttf";
 
 var charSet = blk: {
