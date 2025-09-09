@@ -56,7 +56,22 @@ pub const FontAtlas = struct {
             .h = @intCast(bmp.rows),
         };
 
-        _ = sdl.SDL_UpdateTexture(atlas.texture, &dst_rect, bmp.buffer, bmp.pitch);
+        const glyph_buffer_size: usize = @as(usize, @intCast(bmp.width)) * @as(usize, @intCast(bmp.rows)) * 4;
+        var glyph_buffer = try allocator.alloc(u8, glyph_buffer_size);
+        defer allocator.free(glyph_buffer);
+
+        for (0..@as(usize, @as(usize, @intCast(bmp.rows)))) |y| {
+            for (0..@as(usize, @as(usize, @intCast(bmp.width)))) |x| {
+                const gray_value = bmp.buffer[y * @as(usize, @intCast(bmp.pitch)) + x];
+                const rgba_offset = (y * @as(usize, @intCast(bmp.width)) + x) * 4;
+                glyph_buffer[rgba_offset] = gray_value; // R
+                glyph_buffer[rgba_offset + 1] = gray_value; // G
+                glyph_buffer[rgba_offset + 2] = gray_value; // B
+                glyph_buffer[rgba_offset + 3] = gray_value; // A
+            }
+        }
+
+        _ = sdl.SDL_UpdateTexture(atlas.texture, &dst_rect, @ptrCast(glyph_buffer), @as(c_int, @intCast(bmp.width)) * 4);
 
         const uv: Vec4f = .{
             @as(f32, @floatFromInt(dst_rect.x)) / 1024.0,
