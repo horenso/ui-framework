@@ -269,8 +269,8 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
         },
         .clickEvent => |clickEvent| {
             // This is the cell the user clicked on, now we need to figure out if it's within the text
-            const targetRow: usize = @intFromFloat(clickEvent.pos[1] / (self.fontAtlas.height + FontManager.FONT_SPACING));
-            const targetCol: usize = @intFromFloat(@round(clickEvent.pos[0] / (self.fontAtlas.width + FontManager.FONT_SPACING)));
+            const targetRow: usize = @intFromFloat(clickEvent.pos[1] / self.fontAtlas.height);
+            const targetCol: usize = @intFromFloat(@round(clickEvent.pos[0] / self.fontAtlas.width));
 
             var currentNode = self.lines.first;
             var index: usize = 0;
@@ -297,7 +297,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
 
 inline fn getMaxContentSizeInner(self: *const @This()) Vec2f {
     return .{
-        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * (self.fontAtlas.width + FontManager.FONT_SPACING) + getCursorWidth(self.fontAtlas.width),
+        @as(f32, @floatFromInt(self.longestLine.data.items.len)) * self.fontAtlas.width + getCursorWidth(self.fontAtlas.width),
         @as(f32, @floatFromInt(self.lines.len())) * self.fontAtlas.height,
     };
 }
@@ -310,6 +310,11 @@ pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
 pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     self.base.size = size;
+}
+
+fn getCursorWidth(fontWidth: f32) f32 {
+    const scaled: f32 = fontWidth / 8.0;
+    return @max(1, @abs(scaled));
 }
 
 fn drawText(self: *const @This()) void {
@@ -330,7 +335,7 @@ fn drawText(self: *const @This()) void {
             var rect: sdl.SDL_FRect = .{
                 .x = x,
                 .y = y,
-                .w = maxContentSize[0] + 100,
+                .w = maxContentSize[0],
                 .h = self.fontAtlas.height,
             };
 
@@ -339,7 +344,8 @@ fn drawText(self: *const @This()) void {
             _ = sdl.SDL_SetRenderDrawColor(@ptrCast(renderer), 200, 200, 100, 100);
             _ = sdl.SDL_RenderFillRect(@ptrCast(renderer), &rect);
         }
-        var pen_x: f32 = 0;
+
+        var penX: f32 = 0;
         for (codepoints) |cp| {
             // TODO error handling
             const glyph = self.fontAtlas.getGlyph(self.base.app.allocator, cp) catch unreachable;
@@ -347,14 +353,16 @@ fn drawText(self: *const @This()) void {
             const tex_size: f32 = 1024;
             const src_rect: sdl.SDL_FRect = .{
                 .x = glyph.uv[0] * tex_size,
-                .y = glyph.uv[1] * tex_size,
+                .y = (glyph.uv[1] * tex_size),
                 .w = @floatFromInt(glyph.size[0]),
                 .h = @floatFromInt(glyph.size[1]),
             };
 
             const dst_rect: sdl.SDL_FRect = .{
-                .x = pen_x + @as(f32, @floatFromInt(glyph.bearing[0])),
-                .y = y - @as(f32, @floatFromInt(glyph.bearing[1])) + self.fontAtlas.height,
+                .x = penX + @as(f32, @floatFromInt(glyph.bearing[0])),
+                .y = y + self.fontAtlas.height - @as(f32, @floatFromInt(glyph.bearing[1])) + self.fontAtlas.baseline,
+                //  + @as(f32, @floatFromInt(glyph.bearing[1])) + @as(f32, @floatFromInt(glyph.size[1])),
+                // self.fontAtlas.baseline,
                 .w = @floatFromInt(glyph.size[0]),
                 .h = @floatFromInt(glyph.size[1]),
             };
@@ -364,7 +372,7 @@ fn drawText(self: *const @This()) void {
             _ = sdl.SDL_RenderTexture(@ptrCast(renderer), self.fontAtlas.texture, &src_rect, &dst_rect);
             _ = sdl.SDL_SetTextureColorMod(self.fontAtlas.texture, 255, 255, 255);
 
-            pen_x += self.fontAtlas.width;
+            penX += self.fontAtlas.width;
         }
 
         it = currentNode.next;
@@ -372,9 +380,52 @@ fn drawText(self: *const @This()) void {
     }
 }
 
-fn getCursorWidth(fontWidth: f32) f32 {
-    const scaled: f32 = fontWidth / 8.0;
-    return @max(1, @abs(scaled));
+fn drawGridLines(self: *const @This()) void {
+    const renderer = self.base.app.sdlState.renderer;
+    const cellHeight = self.fontAtlas.height;
+    const cellWidth = self.fontAtlas.width;
+
+    _ = sdl.SDL_SetRenderDrawColor(@ptrCast(renderer), 150, 150, 150, 255);
+
+    var lineCount: usize = 0;
+    var it = self.lines.first;
+    while (it) |currentNode| {
+        lineCount += 1;
+        it = currentNode.next;
+    }
+
+    // Draw horizontal lines for each line of text
+    for (0..lineCount) |index| {
+        const indexFloat: f32 = @floatFromInt(index);
+        const y: f32 = (indexFloat + 1) * cellHeight;
+        _ = sdl.SDL_RenderLine(
+            @ptrCast(renderer),
+            0,
+            y,
+            self.base.size[0],
+            y,
+        );
+        _ = sdl.SDL_RenderLine(
+            @ptrCast(renderer),
+            0,
+            y + self.fontAtlas.baseline,
+            self.base.size[0],
+            y + self.fontAtlas.baseline,
+        );
+    }
+
+    // Draw vertical lines for each character cell
+    for (0..self.longestLine.data.items.len) |index| {
+        const indexFloat: f32 = @floatFromInt(index);
+        const x: f32 = (indexFloat + 1) * cellWidth;
+        _ = sdl.SDL_RenderLine(
+            @ptrCast(renderer),
+            x,
+            0,
+            x,
+            self.base.size[1],
+        );
+    }
 }
 
 pub fn draw(opaquePtr: *const anyopaque) !void {
@@ -383,6 +434,7 @@ pub fn draw(opaquePtr: *const anyopaque) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
     self.drawText();
+    self.drawGridLines();
 
     _ = sdl.SDL_SetRenderDrawColor(
         self.base.app.sdlState.renderer,
@@ -426,7 +478,7 @@ pub fn setCursor(self: *@This(), row: usize, col: usize) void {
     self.cursor.row = row;
     self.cursor.col = col;
 
-    self.cursor.x = (self.fontAtlas.width + FontManager.FONT_SPACING) * @as(f32, @floatFromInt(self.cursor.col));
+    self.cursor.x = self.fontAtlas.width * @as(f32, @floatFromInt(self.cursor.col));
     self.cursor.y = self.fontAtlas.height * @as(f32, @floatFromInt(self.cursor.row));
 
     std.log.debug("cursor{d}:{d}", .{ row, col });

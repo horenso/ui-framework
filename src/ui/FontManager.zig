@@ -12,92 +12,8 @@ const Vec2f = vec.Vec2f;
 const Vec4f = vec.Vec4f;
 const Vec2i = vec.Vec2i;
 
-pub const GlyphInfo = struct {
-    uv: Vec4f,
-    size: [2]i32, // glyph bitmap size
-    bearing: [2]i32, // left/top offsets
-    advance: i32, // advance.x (in 1/64 pixels)
-
-};
-
-pub const FontAtlas = struct {
-    // For now we always give the one pointer to the same font face
-    // later we need a cache for the fontFace and a separate one for the size
-    fontFace: *freetype.FT_FaceRec,
-    texture: *sdl.SDL_Texture,
-    glyphs: std.AutoHashMapUnmanaged(u32, GlyphInfo),
-    nextX: i32,
-    nextY: i32,
-    rowHeight: i32,
-
-    width: f32,
-    height: f32,
-
-    pub fn getGlyph(atlas: *FontAtlas, allocator: std.mem.Allocator, codepoint: u32) !GlyphInfo {
-        if (atlas.glyphs.get(codepoint)) |info| return info;
-
-        const err = freetype.FT_Load_Char(atlas.fontFace, codepoint, freetype.FT_LOAD_RENDER);
-        if (err != 0) return error.FreetypeLoadError;
-
-        const slot = atlas.fontFace.*.glyph;
-        const bmp = slot.*.bitmap;
-
-        // Pack into atlas
-        if (atlas.nextX + @as(i32, @intCast(bmp.width)) > 1024) {
-            atlas.nextX = 0;
-            atlas.nextY += atlas.rowHeight;
-            atlas.rowHeight = 0;
-        }
-
-        const dst_rect = sdl.SDL_Rect{
-            .x = atlas.nextX,
-            .y = atlas.nextY,
-            .w = @intCast(bmp.width),
-            .h = @intCast(bmp.rows),
-        };
-
-        const glyph_buffer_size: usize = @as(usize, @intCast(bmp.width)) * @as(usize, @intCast(bmp.rows)) * 4;
-        var glyph_buffer = try allocator.alloc(u8, glyph_buffer_size);
-        defer allocator.free(glyph_buffer);
-
-        for (0..@as(usize, @as(usize, @intCast(bmp.rows)))) |y| {
-            for (0..@as(usize, @as(usize, @intCast(bmp.width)))) |x| {
-                const gray_value = bmp.buffer[y * @as(usize, @intCast(bmp.pitch)) + x];
-                const rgba_offset = (y * @as(usize, @intCast(bmp.width)) + x) * 4;
-                glyph_buffer[rgba_offset] = gray_value; // R
-                glyph_buffer[rgba_offset + 1] = gray_value; // G
-                glyph_buffer[rgba_offset + 2] = gray_value; // B
-                glyph_buffer[rgba_offset + 3] = gray_value; // A
-            }
-        }
-
-        _ = sdl.SDL_UpdateTexture(atlas.texture, &dst_rect, @ptrCast(glyph_buffer), @as(c_int, @intCast(bmp.width)) * 4);
-
-        const uv: Vec4f = .{
-            @as(f32, @floatFromInt(dst_rect.x)) / 1024.0,
-            @as(f32, @floatFromInt(dst_rect.y)) / 1024.0,
-            @as(f32, @floatFromInt(dst_rect.x + dst_rect.w)) / 1024.0,
-            @as(f32, @floatFromInt(dst_rect.y + dst_rect.h)) / 1024.0,
-        };
-
-        const info: GlyphInfo = .{
-            .uv = uv,
-            .size = .{ @intCast(bmp.width), @intCast(bmp.rows) },
-            .bearing = .{ slot.*.bitmap_left, slot.*.bitmap_top },
-            .advance = @intCast(slot.*.advance.x),
-        };
-        try atlas.glyphs.put(allocator, codepoint, info);
-
-        atlas.nextX += @intCast(bmp.width);
-        if (bmp.rows > atlas.rowHeight) atlas.rowHeight = @intCast(bmp.rows);
-
-        return info;
-    }
-};
-
 const Key = i32;
 
-pub const FONT_SPACING = 4.0;
 const FONT_PATH = "res/VictorMonoAll/VictorMono-Medium.ttf";
 
 var charSet = blk: {
@@ -141,8 +57,12 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     };
 }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+    for (self.cache.values()) |fontAtlas| {
+        allocator.destroy(fontAtlas);
+    }
     self.cache.deinit();
+
     var err: c_int = 0;
     err += freetype.FT_Done_Face(self.fontFace);
     err += freetype.FT_Done_FreeType(self.library);
@@ -167,6 +87,12 @@ pub fn getFontAtlas(
     // TODO error handling
     _ = freetype.FT_Set_Pixel_Sizes(self.fontFace, 0, @intCast(size));
 
+    const metrics = self.fontFace.*.size.*.metrics;
+
+    const width: f32 = @floatFromInt(metrics.max_advance >> 6);
+    const height: f32 = @floatFromInt(metrics.height >> 6);
+    const baseline: f32 = @floatFromInt(metrics.descender >> 6);
+
     // Create SDL texture atlas (RGBA or A8)
     const texture = sdl.SDL_CreateTexture(
         renderer,
@@ -175,18 +101,6 @@ pub fn getFontAtlas(
         1024,
         1024,
     ) orelse return error.SDLError;
-
-    // Measure the font
-    var width: f32 = 0;
-    var height: f32 = 0;
-    const err = freetype.FT_Load_Char(self.fontFace, 'M', freetype.FT_LOAD_RENDER);
-    if (err == 0) {
-        const slot = self.fontFace.*.glyph;
-        width = @floatFromInt(slot.*.advance.x >> 6);
-        height = @floatFromInt(slot.*.bitmap.rows);
-    } else {
-        return error.FontMeasureError;
-    }
 
     const atlas = try allocator.create(FontAtlas);
     atlas.* = .{
@@ -198,8 +112,98 @@ pub fn getFontAtlas(
         .rowHeight = 0,
         .width = width,
         .height = height,
+        .baseline = baseline,
     };
     try self.cache.put(size, atlas);
 
     return atlas;
 }
+
+pub const GlyphInfo = struct {
+    uv: Vec4f,
+    size: Vec2i, // glyph bitmap size
+    bearing: Vec2i, // left/top offsets
+    advance: i32, // advance.x (in 1/64 pixels)
+
+};
+
+pub const FontAtlas = struct {
+    // For now we always give the one pointer to the same font face
+    // later we need a cache for the fontFace and a separate one for the size
+    fontFace: *freetype.FT_FaceRec,
+    texture: *sdl.SDL_Texture,
+    glyphs: std.AutoHashMapUnmanaged(u32, GlyphInfo),
+    nextX: i32,
+    nextY: i32,
+    rowHeight: i32,
+
+    width: f32,
+    height: f32,
+    baseline: f32,
+
+    pub fn getGlyph(atlas: *FontAtlas, allocator: std.mem.Allocator, codepoint: u32) !GlyphInfo {
+        if (atlas.glyphs.get(codepoint)) |info| return info;
+
+        const err = freetype.FT_Load_Char(atlas.fontFace, codepoint, freetype.FT_LOAD_RENDER);
+        if (err != 0) return error.FreetypeLoadError;
+
+        const slot = atlas.fontFace.*.glyph;
+        const bmp = slot.*.bitmap;
+
+        // Pack into atlas
+        if (atlas.nextX + @as(i32, @intCast(bmp.width)) > 1024) {
+            atlas.nextX = 0;
+            atlas.nextY += atlas.rowHeight;
+            atlas.rowHeight = 0;
+        }
+
+        const dst_rect: sdl.SDL_Rect = .{
+            .x = atlas.nextX,
+            .y = atlas.nextY,
+            .w = @intCast(bmp.width),
+            .h = @intCast(bmp.rows),
+        };
+
+        const glyph_buffer_size: usize = @as(usize, @intCast(bmp.width)) * @as(usize, @intCast(bmp.rows)) * 4;
+        var glyph_buffer = try allocator.alloc(u8, glyph_buffer_size);
+        defer allocator.free(glyph_buffer);
+
+        for (0..@as(usize, @as(usize, @intCast(bmp.rows)))) |y| {
+            for (0..@as(usize, @as(usize, @intCast(bmp.width)))) |x| {
+                const gray_value = bmp.buffer[y * @as(usize, @intCast(bmp.pitch)) + x];
+                const rgba_offset = (y * @as(usize, @intCast(bmp.width)) + x) * 4;
+                glyph_buffer[rgba_offset] = gray_value; // R
+                glyph_buffer[rgba_offset + 1] = gray_value; // G
+                glyph_buffer[rgba_offset + 2] = gray_value; // B
+                glyph_buffer[rgba_offset + 3] = gray_value; // A
+            }
+        }
+
+        _ = sdl.SDL_UpdateTexture(
+            atlas.texture,
+            &dst_rect,
+            @ptrCast(glyph_buffer),
+            @as(c_int, @intCast(bmp.width)) * 4,
+        );
+
+        const uv: Vec4f = .{
+            @as(f32, @floatFromInt(dst_rect.x)) / 1024.0,
+            @as(f32, @floatFromInt(dst_rect.y)) / 1024.0,
+            @as(f32, @floatFromInt(dst_rect.x + dst_rect.w)) / 1024.0,
+            @as(f32, @floatFromInt(dst_rect.y + dst_rect.h)) / 1024.0,
+        };
+
+        const info: GlyphInfo = .{
+            .uv = uv,
+            .size = .{ @intCast(bmp.width), @intCast(bmp.rows) },
+            .bearing = .{ slot.*.bitmap_left, slot.*.bitmap_top },
+            .advance = @intCast(slot.*.advance.x),
+        };
+        try atlas.glyphs.put(allocator, codepoint, info);
+
+        atlas.nextX += @intCast(bmp.width);
+        if (bmp.rows > atlas.rowHeight) atlas.rowHeight = @intCast(bmp.rows);
+
+        return info;
+    }
+};

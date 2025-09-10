@@ -87,7 +87,7 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
 
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.inputQueue.deinit(allocator);
-    self.fontManager.deinit();
+    self.fontManager.deinit(allocator);
 
     if (self.sdlState.cursor) |cursor| {
         sdl.SDL_DestroyCursor(cursor);

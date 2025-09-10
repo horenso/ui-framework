@@ -95,23 +95,35 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
 
 pub fn draw(opaquePtr: *const anyopaque) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
-
     const renderer = self.base.app.sdlState.renderer;
-    // Draw child content with offset (camera simulation)
-    {
-        var prevViewport: sdl.SDL_Rect = undefined;
-        defer _ = sdl.SDL_GetRenderViewport(@ptrCast(renderer), &prevViewport);
 
-        const offsetRect: sdl.SDL_Rect = .{
-            .x = @intFromFloat(-self.offset[0]),
-            .y = @intFromFloat(-self.offset[1]),
-            .w = @intFromFloat(self.base.size[0]),
-            .h = @intFromFloat(self.base.size[1]),
-        };
-        _ = sdl.SDL_SetRenderViewport(@ptrCast(renderer), &offsetRect);
-        try self.child.draw();
-    }
+    // Clip to scroll container
+    const clip: sdl.SDL_Rect = .{
+        .x = @intFromFloat(self.base.pos[0]),
+        .y = @intFromFloat(self.base.pos[1]),
+        .w = @intFromFloat(self.base.size[0]),
+        .h = @intFromFloat(self.base.size[1]),
+    };
+    _ = sdl.SDL_RenderSetClipRect(@ptrCast(renderer), &clip);
+    defer _ = sdl.SDL_RenderSetClipRect(@ptrCast(renderer), null);
 
+    // Save previous viewport
+    var prevViewport: sdl.SDL_Rect = undefined;
+    _ = sdl.SDL_GetRenderViewport(@ptrCast(renderer), &prevViewport);
+    defer _ = sdl.SDL_RenderSetViewport(@ptrCast(renderer), &prevViewport);
+
+    // Translate child by offset inside scroll container
+    const childViewport: sdl.SDL_Rect = .{
+        .x = clip.x - @as(c_int, @intFromFloat(self.offset[0])),
+        .y = clip.y - @as(c_int, @intFromFloat(self.offset[1])),
+        .w = clip.w,
+        .h = clip.h,
+    };
+    _ = sdl.SDL_RenderSetViewport(@ptrCast(renderer), &childViewport);
+
+    try self.child.draw();
+
+    // --- Draw scrollbars after restoring clip ---
     if (self.scrollbarY.visible) {
         const rect: sdl.SDL_FRect = .{
             .x = self.base.size[0] - SCROLLBAR_SIZE,
@@ -126,7 +138,7 @@ pub fn draw(opaquePtr: *const anyopaque) !void {
             SCROLLBAR_FOREGROUND_COLOR.b,
             SCROLLBAR_FOREGROUND_COLOR.a,
         );
-        _ = sdl.SDL_RenderFillRect(@ptrCast(renderer), &rect);
+        _ = sdl.SDL_RenderFillRectF(@ptrCast(renderer), &rect);
     }
 
     if (self.scrollbarX.visible) {
@@ -143,7 +155,7 @@ pub fn draw(opaquePtr: *const anyopaque) !void {
             SCROLLBAR_FOREGROUND_COLOR.b,
             SCROLLBAR_FOREGROUND_COLOR.a,
         );
-        _ = sdl.SDL_RenderFillRect(@ptrCast(renderer), &rect);
+        _ = sdl.SDL_RenderFillRectF(@ptrCast(renderer), &rect);
     }
 }
 

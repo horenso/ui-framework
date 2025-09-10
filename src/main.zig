@@ -52,12 +52,19 @@ pub fn main() anyerror!void {
         try app.pollEvents();
         while (app.inputQueue.pop()) |event| {
             std.log.debug("Event {any}", .{event});
-            if (event == .keyEvent and event.keyEvent.ctrl and event.keyEvent.code == .num1) {
-                const newFontSize: i32 = @intFromFloat(textInput.fontAtlas.height + 4);
-                textInput.changeFontSize(&app.fontManager, newFontSize);
-            } else if (event == .keyEvent and event.keyEvent.ctrl and event.keyEvent.code == .num2) {
-                const newFontSize: i32 = @intFromFloat(@max(textInput.fontAtlas.height - 4, 0));
-                textInput.changeFontSize(&app.fontManager, newFontSize);
+            switch (event) {
+                .keyEvent => |keyEvent| {
+                    if (keyEvent.type == .pressed) {
+                        if (keyEvent.ctrl and keyEvent.code == .num1) {
+                            const newFontSize: i32 = @intFromFloat(textInput.fontAtlas.height + 4);
+                            textInput.changeFontSize(&app.fontManager, newFontSize);
+                        } else if (keyEvent.ctrl and keyEvent.code == .num2) {
+                            const newFontSize: i32 = @intFromFloat(@max(textInput.fontAtlas.height - 4, 0));
+                            textInput.changeFontSize(&app.fontManager, newFontSize);
+                        }
+                    }
+                },
+                else => {},
             }
             _ = try scrollContainerWidget.handleEvent(event);
         }
