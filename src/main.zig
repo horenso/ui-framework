@@ -24,7 +24,7 @@ pub fn main() anyerror!void {
     }, allocator);
     defer app.deinit(allocator);
 
-    var textInput = try TextInput.init(&app, &app.fontManager);
+    var textInput = try TextInput.init(&app, app.renderer, &app.fontManager);
     var textInputWidget = textInput.widget();
     defer textInputWidget.deinit();
 
@@ -61,6 +61,8 @@ pub fn main() anyerror!void {
                         } else if (keyEvent.ctrl and keyEvent.code == .num2) {
                             const newFontSize: i32 = @intFromFloat(@max(textInput.fontAtlas.height - 4, 0));
                             textInput.changeFontSize(&app.fontManager, newFontSize);
+                        } else if (keyEvent.ctrl and keyEvent.code == .num3) {
+                            textInput.showGrid = !textInput.showGrid;
                         }
                     }
                 },

@@ -3,12 +3,14 @@ const std = @import("std");
 const sdl = @import("./sdl.zig").sdl;
 
 const ButtonType = event.ButtonType;
+const Color = Renderer.Color;
 const event = @import("event.zig");
 const Event = event.Event;
 const FontManager = @import("FontManager.zig");
 const KeyCode = event.KeyCode;
 const KeyEvent = event.KeyEvent;
 const KeyEventType = event.KeyEventType;
+const Renderer = @import("Renderer.zig");
 const TextEvent = event.TextEvent;
 const Widget = @import("./widget/Widget.zig");
 
@@ -29,7 +31,6 @@ const InputState = struct {
 
 const SdlState = struct {
     window: *sdl.SDL_Window,
-    renderer: *sdl.SDL_Renderer,
     cursor: ?*sdl.SDL_Cursor,
 };
 
@@ -41,6 +42,7 @@ sdlState: SdlState,
 allocator: std.mem.Allocator,
 
 fontManager: FontManager,
+renderer: Renderer,
 
 pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFailure}!@This() {
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
@@ -62,7 +64,7 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
     _ = sdl.SDL_SetWindowMinimumSize(window, 300, 300);
     _ = sdl.SDL_StartTextInput(window);
 
-    const renderer = sdl.SDL_CreateRenderer(window, null) orelse {
+    const sdlRenderer = sdl.SDL_CreateRenderer(window, null) orelse {
         std.log.err("SDL_CreateRenderer() Error: {s}", .{sdl.SDL_GetError()});
         return error.InitFailure;
     };
@@ -77,9 +79,9 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
         .allocator = allocator,
         .inputQueue = .empty,
         .fontManager = FontManager.init(allocator) catch return error.InitFailure,
+        .renderer = Renderer.init(sdlRenderer),
         .sdlState = .{
             .window = window,
-            .renderer = renderer,
             .cursor = cursor,
         },
     };
@@ -93,7 +95,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
         sdl.SDL_DestroyCursor(cursor);
     }
 
-    sdl.SDL_DestroyRenderer(self.sdlState.renderer);
+    self.renderer.deinit();
     sdl.SDL_DestroyWindow(self.sdlState.window);
 
     sdl.SDL_Quit();
@@ -109,12 +111,9 @@ pub fn layout(self: *@This(), topWidget: *Widget) void {
 }
 
 pub fn draw(self: *@This(), topWidget: *Widget) !void {
-    _ = sdl.SDL_SetRenderDrawColor(self.sdlState.renderer, 255, 255, 255, 255);
-    _ = sdl.SDL_RenderClear(self.sdlState.renderer);
-
+    self.renderer.clear(Color.init(255, 255, 255, 255));
     try topWidget.draw();
-
-    _ = sdl.SDL_RenderPresent(self.sdlState.renderer);
+    self.renderer.present();
 }
 
 pub fn shouldClose(self: *@This()) bool {

@@ -1,5 +1,4 @@
 const std = @import("std");
-
 const sdl = @import("sdl.zig").sdl;
 
 const freetype = @cImport({
@@ -13,6 +12,7 @@ const Vec4f = vec.Vec4f;
 const Vec2i = vec.Vec2i;
 
 const Key = i32;
+const Renderer = @import("Renderer.zig");
 
 const FONT_PATH = "res/VictorMonoAll/VictorMono-Medium.ttf";
 
@@ -75,7 +75,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
 pub fn getFontAtlas(
     self: *@This(),
     allocator: std.mem.Allocator,
-    renderer: *sdl.SDL_Renderer,
+    renderer: Renderer,
     size: i32,
 ) !*FontAtlas {
     if (self.cache.get(size)) |atlas| {
@@ -95,7 +95,7 @@ pub fn getFontAtlas(
 
     // Create SDL texture atlas (RGBA or A8)
     const texture = sdl.SDL_CreateTexture(
-        renderer,
+        renderer.sdlRenderer,
         sdl.SDL_PIXELFORMAT_RGBA32,
         sdl.SDL_TEXTUREACCESS_STREAMING,
         1024,

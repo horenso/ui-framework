@@ -1,13 +1,14 @@
 const std = @import("std");
-
 const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
-const Color = @import("../Color.zig");
+const Color = Renderer.Color;
 const Event = @import("../event.zig").Event;
 const FontAtlas = FontManager.FontAtlas;
 const FontManager = @import("../FontManager.zig");
 const Widget = @import("./Widget.zig");
+const RectF = Renderer.RectF;
+const Renderer = @import("../Renderer.zig");
 const ScrollContainer = @import("./ScrollContainer.zig");
 const ScrollProxy = @import("./ScrollProxy.zig");
 
@@ -18,6 +19,7 @@ const Vec2i = vec.Vec2i;
 
 const INITIAL_FONT_WIDTH = 30;
 const CURSOR_COLOR = Color.init(0, 0, 0, 160);
+const GRID_LINES_COLOR = Color.init(150, 150, 150, 255);
 
 const LineData = struct {
     node: std.DoublyLinkedList.Node,
@@ -44,7 +46,9 @@ cursor: Cursor,
 
 scrollProxy: ScrollProxy,
 
-pub fn init(app: *Application, fontManager: *FontManager) !@This() {
+showGrid: bool = false,
+
+pub fn init(app: *Application, renderer: Renderer, fontManager: *FontManager) !@This() {
     var lines: std.DoublyLinkedList = .{};
     var emptyLine: *LineData = try app.allocator.create(LineData);
     emptyLine.* = std.mem.zeroes(LineData);
@@ -53,7 +57,7 @@ pub fn init(app: *Application, fontManager: *FontManager) !@This() {
 
     const fontAtlas = try fontManager.getFontAtlas(
         app.allocator,
-        app.sdlState.renderer,
+        renderer,
         INITIAL_FONT_WIDTH,
     );
 
@@ -119,7 +123,7 @@ fn makeNewLine(self: *@This()) !*LineData {
 }
 
 pub fn changeFontSize(self: *@This(), fontManager: *FontManager, fontSize: i32) void {
-    self.fontAtlas = fontManager.getFontAtlas(self.base.app.allocator, self.base.app.sdlState.renderer, fontSize) catch unreachable;
+    self.fontAtlas = fontManager.getFontAtlas(self.base.app.allocator, self.base.app.renderer, fontSize) catch unreachable;
     self.cursor.width = getCursorWidth(self.fontAtlas.width);
 }
 
@@ -332,17 +336,14 @@ fn drawText(self: *const @This()) void {
         if (index == self.cursor.row) {
             const maxContentSize = self.getMaxContentSizeInner();
 
-            var rect: sdl.SDL_FRect = .{
+            const rect: RectF = .{
                 .x = x,
                 .y = y,
                 .w = maxContentSize[0],
                 .h = self.fontAtlas.height,
             };
-
-            const renderer = self.base.app.sdlState.renderer;
-            _ = sdl.SDL_SetRenderDrawBlendMode(@ptrCast(renderer), sdl.SDL_BLENDMODE_BLEND);
-            _ = sdl.SDL_SetRenderDrawColor(@ptrCast(renderer), 200, 200, 100, 100);
-            _ = sdl.SDL_RenderFillRect(@ptrCast(renderer), &rect);
+            const renderer = self.base.app.renderer;
+            renderer.fillRect(rect, Color.init(200, 200, 100, 100));
         }
 
         var penX: f32 = 0;
@@ -367,7 +368,7 @@ fn drawText(self: *const @This()) void {
                 .h = @floatFromInt(glyph.size[1]),
             };
 
-            const renderer = self.base.app.sdlState.renderer;
+            const renderer = self.base.app.renderer.sdlRenderer;
             _ = sdl.SDL_SetTextureColorMod(self.fontAtlas.texture, 0, 0, 0);
             _ = sdl.SDL_RenderTexture(@ptrCast(renderer), self.fontAtlas.texture, &src_rect, &dst_rect);
             _ = sdl.SDL_SetTextureColorMod(self.fontAtlas.texture, 255, 255, 255);
@@ -381,11 +382,9 @@ fn drawText(self: *const @This()) void {
 }
 
 fn drawGridLines(self: *const @This()) void {
-    const renderer = self.base.app.sdlState.renderer;
+    const renderer = self.base.app.renderer;
     const cellHeight = self.fontAtlas.height;
     const cellWidth = self.fontAtlas.width;
-
-    _ = sdl.SDL_SetRenderDrawColor(@ptrCast(renderer), 150, 150, 150, 255);
 
     var lineCount: usize = 0;
     var it = self.lines.first;
@@ -398,19 +397,15 @@ fn drawGridLines(self: *const @This()) void {
     for (0..lineCount) |index| {
         const indexFloat: f32 = @floatFromInt(index);
         const y: f32 = (indexFloat + 1) * cellHeight;
-        _ = sdl.SDL_RenderLine(
-            @ptrCast(renderer),
-            0,
-            y,
-            self.base.size[0],
-            y,
+        renderer.line(
+            .{ 0, y },
+            .{ self.base.size[0], y },
+            GRID_LINES_COLOR,
         );
-        _ = sdl.SDL_RenderLine(
-            @ptrCast(renderer),
-            0,
-            y + self.fontAtlas.baseline,
-            self.base.size[0],
-            y + self.fontAtlas.baseline,
+        renderer.line(
+            .{ 0, y + self.fontAtlas.baseline },
+            .{ self.base.size[0], y + self.fontAtlas.baseline },
+            GRID_LINES_COLOR,
         );
     }
 
@@ -418,12 +413,10 @@ fn drawGridLines(self: *const @This()) void {
     for (0..self.longestLine.data.items.len) |index| {
         const indexFloat: f32 = @floatFromInt(index);
         const x: f32 = (indexFloat + 1) * cellWidth;
-        _ = sdl.SDL_RenderLine(
-            @ptrCast(renderer),
-            x,
-            0,
-            x,
-            self.base.size[1],
+        renderer.line(
+            .{ x, 0 },
+            .{ x, self.base.size[1] },
+            GRID_LINES_COLOR,
         );
     }
 }
@@ -434,21 +427,16 @@ pub fn draw(opaquePtr: *const anyopaque) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
     self.drawText();
-    self.drawGridLines();
+    if (self.showGrid) {
+        self.drawGridLines();
+    }
 
-    _ = sdl.SDL_SetRenderDrawColor(
-        self.base.app.sdlState.renderer,
-        CURSOR_COLOR.r,
-        CURSOR_COLOR.g,
-        CURSOR_COLOR.b,
-        CURSOR_COLOR.a,
-    );
-    _ = sdl.SDL_RenderFillRect(self.base.app.sdlState.renderer, &.{
+    self.base.app.renderer.fillRect(.{
         .x = self.cursor.x,
         .y = self.cursor.y,
         .w = self.cursor.width,
         .h = self.fontAtlas.height,
-    });
+    }, CURSOR_COLOR);
 }
 
 pub fn getSize(opaquePtr: *const anyopaque) Vec2f {

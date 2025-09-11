@@ -3,8 +3,9 @@ const std = @import("std");
 const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
-const Color = @import("../Color.zig");
+const Color = Renderer.Color;
 const Event = @import("../event.zig").Event;
+const Renderer = @import("../Renderer.zig");
 const Widget = @import("./Widget.zig");
 
 const vec = @import("../vec.zig");
@@ -95,67 +96,49 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
 
 pub fn draw(opaquePtr: *const anyopaque) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
-    const renderer = self.base.app.sdlState.renderer;
+    const renderer = self.base.app.renderer;
 
-    // Clip to scroll container
-    const clip: sdl.SDL_Rect = .{
-        .x = @intFromFloat(self.base.pos[0]),
-        .y = @intFromFloat(self.base.pos[1]),
-        .w = @intFromFloat(self.base.size[0]),
-        .h = @intFromFloat(self.base.size[1]),
-    };
-    _ = sdl.SDL_RenderSetClipRect(@ptrCast(renderer), &clip);
-    defer _ = sdl.SDL_RenderSetClipRect(@ptrCast(renderer), null);
+    // // Clip to scroll container
+    // const clip: sdl.SDL_Rect = .{
+    //     .x = @intFromFloat(self.offset[0]),
+    //     .y = @intFromFloat(self.offset[1]),
+    //     .w = @intFromFloat(self.base.size[0]),
+    //     .h = @intFromFloat(self.base.size[1]),
+    // };
+    // _ = sdl.SDL_SetRenderClipRect(@ptrCast(renderer), &clip);
+    // defer _ = sdl.SDL_SetRenderClipRect(@ptrCast(renderer), null);
 
-    // Save previous viewport
-    var prevViewport: sdl.SDL_Rect = undefined;
-    _ = sdl.SDL_GetRenderViewport(@ptrCast(renderer), &prevViewport);
-    defer _ = sdl.SDL_RenderSetViewport(@ptrCast(renderer), &prevViewport);
+    // // Save previous viewport
+    // var prevViewport: sdl.SDL_Rect = undefined;
+    // _ = sdl.SDL_GetRenderViewport(@ptrCast(renderer), &prevViewport);
+    // defer _ = sdl.SDL_SetRenderViewport(@ptrCast(renderer), &prevViewport);
 
-    // Translate child by offset inside scroll container
-    const childViewport: sdl.SDL_Rect = .{
-        .x = clip.x - @as(c_int, @intFromFloat(self.offset[0])),
-        .y = clip.y - @as(c_int, @intFromFloat(self.offset[1])),
-        .w = clip.w,
-        .h = clip.h,
-    };
-    _ = sdl.SDL_RenderSetViewport(@ptrCast(renderer), &childViewport);
+    // // Translate child by offset inside scroll container
+    // const childViewport: sdl.SDL_Rect = .{
+    //     .x = clip.x - @as(c_int, @intFromFloat(self.offset[0])),
+    //     .y = clip.y - @as(c_int, @intFromFloat(self.offset[1])),
+    //     .w = clip.w,
+    //     .h = clip.h,
+    // };
+    // _ = sdl.SDL_SetRenderViewport(@ptrCast(renderer), &childViewport);
 
     try self.child.draw();
 
-    // --- Draw scrollbars after restoring clip ---
     if (self.scrollbarY.visible) {
-        const rect: sdl.SDL_FRect = .{
+        renderer.fillRect(.{
             .x = self.base.size[0] - SCROLLBAR_SIZE,
             .y = self.scrollbarY.thumbPos,
             .w = SCROLLBAR_SIZE,
             .h = self.scrollbarY.thumbLength,
-        };
-        _ = sdl.SDL_SetRenderDrawColor(
-            @ptrCast(renderer),
-            SCROLLBAR_FOREGROUND_COLOR.r,
-            SCROLLBAR_FOREGROUND_COLOR.g,
-            SCROLLBAR_FOREGROUND_COLOR.b,
-            SCROLLBAR_FOREGROUND_COLOR.a,
-        );
-        _ = sdl.SDL_RenderFillRectF(@ptrCast(renderer), &rect);
+        }, SCROLLBAR_FOREGROUND_COLOR);
     }
-
     if (self.scrollbarX.visible) {
-        const rect: sdl.SDL_FRect = .{
+        renderer.fillRect(.{
             .x = self.scrollbarX.thumbPos,
             .y = self.base.size[1] - SCROLLBAR_SIZE,
             .w = self.scrollbarX.thumbLength,
             .h = SCROLLBAR_SIZE,
-        };
-        _ = sdl.SDL_SetRenderDrawColor(
-            @ptrCast(renderer),
-            SCROLLBAR_FOREGROUND_COLOR.r,
-            SCROLLBAR_FOREGROUND_COLOR.g,
-            SCROLLBAR_FOREGROUND_COLOR.b,
-            SCROLLBAR_FOREGROUND_COLOR.a,
-        );
-        _ = sdl.SDL_RenderFillRectF(@ptrCast(renderer), &rect);
+        }, SCROLLBAR_FOREGROUND_COLOR);
     }
 }
 
