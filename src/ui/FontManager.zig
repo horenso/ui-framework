@@ -59,6 +59,7 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
 
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     for (self.cache.values()) |fontAtlas| {
+        fontAtlas.glyphs.deinit(allocator);
         allocator.destroy(fontAtlas);
     }
     self.cache.deinit();

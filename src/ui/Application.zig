@@ -69,6 +69,10 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
         return error.InitFailure;
     };
 
+    if (!sdl.SDL_SetRenderVSync(sdlRenderer, 1)) {
+        std.log.warn("Could not enable VSync: {s}", .{sdl.SDL_GetError()});
+    }
+
     // Set the I-beam cursor
     const cursor = sdl.SDL_CreateSystemCursor(sdl.SDL_SYSTEM_CURSOR_TEXT);
     if (cursor != null) {

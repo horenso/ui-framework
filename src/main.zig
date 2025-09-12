@@ -6,7 +6,9 @@ const Widget = @import("ui/widget/Widget.zig");
 const ScrollContainer = @import("ui/widget/ScrollContainer.zig");
 
 pub fn main() anyerror!void {
-    var debugAllocator = std.heap.DebugAllocator(.{}){};
+    var debugAllocator = std.heap.DebugAllocator(.{
+        .verbose_log = false,
+    }){};
     const allocator = debugAllocator.allocator();
     defer {
         const result = debugAllocator.deinit();

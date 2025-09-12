@@ -16,8 +16,8 @@ pub const Color = struct {
         return .{ .r = r, .g = g, .b = b, .a = a };
     }
 
-    inline fn toSdl(comptime color: @This()) sdl.SDL_Color {
-        return .{ .r = color.r, .g = color.g, .b = color.b, .a = color.a };
+    inline fn toSdl(self: @This()) sdl.SDL_Color {
+        return .{ .r = self.r, .g = self.g, .b = self.b, .a = self.a };
     }
 };
 
@@ -55,6 +55,7 @@ pub const RectF = struct {
 pub const Texture = struct { sdlTexture: *sdl.SDL_Texture };
 
 sdlRenderer: *sdl.SDL_Renderer,
+offset: Vec2f,
 
 pub fn init(sdlRenderer: *sdl.SDL_Renderer) @This() {
     _ = sdl.SDL_RenderClear(sdlRenderer);
