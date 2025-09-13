@@ -180,6 +180,9 @@ fn handleKeyEvent(self: *@This(), sdlScancode: sdl.SDL_Scancode, sdlEventType: u
         sdl.SDL_SCANCODE_PERIOD => .period,
         sdl.SDL_SCANCODE_COMMA => .comma,
 
+        sdl.SDL_SCANCODE_HOME => .home,
+        sdl.SDL_SCANCODE_END => .end,
+
         else => .unknown,
     };
 

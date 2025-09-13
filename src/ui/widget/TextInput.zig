@@ -17,7 +17,7 @@ const Vec2f = vec.Vec2f;
 const Vec4f = vec.Vec4f;
 const Vec2i = vec.Vec2i;
 
-const INITIAL_FONT_WIDTH = 30;
+const INITIAL_FONT_WIDTH = 20;
 const CURSOR_COLOR = Color.init(0, 0, 0, 160);
 const TEXT_COLOR = Color.init(0, 0, 0, 255);
 const GRID_LINES_COLOR = Color.init(150, 150, 150, 255);
@@ -25,6 +25,10 @@ const GRID_LINES_COLOR = Color.init(150, 150, 150, 255);
 const LineData = struct {
     node: std.DoublyLinkedList.Node,
     data: std.ArrayList(u32),
+
+    inline fn getFromNode(node: *std.DoublyLinkedList.Node) *@This() {
+        return @fieldParentPtr("node", node);
+    }
 };
 
 const Cursor = struct {
@@ -98,7 +102,7 @@ inline fn deinitLines(self: *@This()) void {
     while (it) |currentNode| {
         it = currentNode.next;
 
-        const line: *LineData = @fieldParentPtr("node", currentNode);
+        const line: *LineData = LineData.getFromNode(currentNode);
         self.lines.remove(currentNode);
         line.data.deinit(self.base.app.allocator);
         self.base.app.allocator.destroy(line);
@@ -111,7 +115,7 @@ fn findLongestLine(self: *@This()) void {
     while (it) |currentNode| {
         it = currentNode.next;
 
-        const line: *LineData = @fieldParentPtr("node", currentNode);
+        const line: *LineData = LineData.getFromNode(currentNode);
         if (line.data.items.len > longest) {
             self.longestLine = line;
             longest = line.data.items.len;
@@ -146,7 +150,7 @@ pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const 
         }
     }
     if (self.lines.first) |firstLine| {
-        self.currentLine = @fieldParentPtr("node", firstLine);
+        self.currentLine = LineData.getFromNode(firstLine);
         self.findLongestLine();
     } else {
         const newLine = try self.makeNewLine();
@@ -160,7 +164,7 @@ fn goOneLeft(self: *@This()) void {
     if (self.cursor.col > 0) {
         self.setCursorCol(self.cursor.col - 1, true);
     } else if (self.currentLine.node.prev) |prevLine| {
-        self.currentLine = @fieldParentPtr("node", prevLine);
+        self.currentLine = LineData.getFromNode(prevLine);
         self.setCursor(self.cursor.row - 1, self.currentLine.data.items.len, true);
     }
 }
@@ -169,14 +173,14 @@ fn goOneRight(self: *@This()) void {
     if (self.cursor.col < self.currentLine.data.items.len) {
         self.setCursorCol(self.cursor.col + 1, true);
     } else if (self.currentLine.node.next) |nextLine| {
-        self.currentLine = @fieldParentPtr("node", nextLine);
+        self.currentLine = LineData.getFromNode(nextLine);
         self.setCursor(self.cursor.row + 1, 0, true);
     }
 }
 
 fn goOneUp(self: *@This()) void {
     if (self.currentLine.node.prev) |prevLine| {
-        self.currentLine = @fieldParentPtr("node", prevLine);
+        self.currentLine = LineData.getFromNode(prevLine);
         self.setCursor(
             self.cursor.row - 1,
             @min(self.currentLine.data.items.len, self.cursor.preferredCol),
@@ -187,13 +191,32 @@ fn goOneUp(self: *@This()) void {
 
 fn goOneDown(self: *@This()) void {
     if (self.currentLine.node.next) |nextLine| {
-        self.currentLine = @fieldParentPtr("node", nextLine);
+        self.currentLine = LineData.getFromNode(nextLine);
         self.setCursor(
             self.cursor.row + 1,
             @min(self.currentLine.data.items.len, self.cursor.preferredCol),
             false,
         );
     }
+}
+
+fn goToBeginningOfLine(self: *@This()) void {
+    self.setCursorCol(0, true);
+}
+
+fn goToEndOfLine(self: *@This()) void {
+    self.setCursorCol(self.currentLine.data.items.len, true);
+}
+
+fn goToFirstLine(self: *@This()) void {
+    self.setCursor(0, 0, true);
+    self.currentLine = LineData.getFromNode(self.lines.first.?);
+}
+
+fn goToLastLine(self: *@This()) void {
+    self.currentLine = LineData.getFromNode(self.lines.last.?);
+    const index = self.lines.len() - 1;
+    self.setCursor(index, 0, true);
 }
 
 fn splitLine(self: *@This()) !void {
@@ -220,7 +243,7 @@ fn deleteOneBackward(self: *@This()) !void {
     } else if (self.currentLine.node.prev) |prevLine| {
         self.lines.remove(&self.currentLine.node);
 
-        const line: *LineData = @fieldParentPtr("node", prevLine);
+        const line: *LineData = LineData.getFromNode(prevLine);
         self.setCursor(self.cursor.row - 1, line.data.items.len, true);
 
         try line.data.appendSlice(self.base.app.allocator, self.currentLine.data.items[0..]);
@@ -239,7 +262,7 @@ fn deleteOneForward(self: *@This()) !void {
             self.findLongestLine();
         }
     } else if (self.currentLine.node.next) |nextLine| {
-        const line: *LineData = @fieldParentPtr("node", nextLine);
+        const line: *LineData = LineData.getFromNode(nextLine);
         try self.currentLine.data.appendSlice(self.base.app.allocator, line.data.items[0..]);
         self.lines.remove(nextLine);
         line.data.deinit(self.base.app.allocator);
@@ -275,6 +298,20 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
                 },
                 .backspace => try self.deleteOneBackward(),
                 .delete => try self.deleteOneForward(),
+                .home => {
+                    if (keyEvent.ctrl) {
+                        self.goToFirstLine();
+                    } else {
+                        self.goToBeginningOfLine();
+                    }
+                },
+                .end => {
+                    if (keyEvent.ctrl) {
+                        self.goToLastLine();
+                    } else {
+                        self.goToEndOfLine();
+                    }
+                },
                 else => return false,
             }
             return true;
@@ -297,7 +334,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
             var index: usize = 0;
             while (currentNode) |node| {
                 if (index == targetRow) {
-                    self.currentLine = @fieldParentPtr("node", node);
+                    self.currentLine = LineData.getFromNode(node);
                     break;
                 }
                 currentNode = node.next;
@@ -343,7 +380,7 @@ fn drawText(self: *const @This(), renderer: *Renderer) void {
     var index: usize = 0;
 
     while (it) |currentNode| {
-        const lineData: *LineData = @fieldParentPtr("node", currentNode);
+        const lineData: *LineData = LineData.getFromNode(currentNode);
         const codepoints = lineData.data.items;
 
         const indexFloat: f32 = @floatFromInt(index);
@@ -383,6 +420,8 @@ fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
     const cellHeight = self.fontAtlas.height;
     const cellWidth = self.fontAtlas.width;
 
+    const contentSize = self.getMaxContentSizeInner();
+
     var lineCount: usize = 0;
     var it = self.lines.first;
     while (it) |currentNode| {
@@ -396,12 +435,12 @@ fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
         const y: f32 = (indexFloat + 1) * cellHeight;
         renderer.line(
             .{ 0, y },
-            .{ self.base.size[0], y },
+            .{ contentSize[0], y },
             GRID_LINES_COLOR,
         );
         renderer.line(
             .{ 0, y + self.fontAtlas.baseline },
-            .{ self.base.size[0], y + self.fontAtlas.baseline },
+            .{ contentSize[0], y + self.fontAtlas.baseline },
             GRID_LINES_COLOR,
         );
     }
@@ -412,7 +451,7 @@ fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
         const x: f32 = (indexFloat + 1) * cellWidth;
         renderer.line(
             .{ x, 0 },
-            .{ x, self.base.size[1] },
+            .{ x, contentSize[1] },
             GRID_LINES_COLOR,
         );
     }

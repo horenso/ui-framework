@@ -14,6 +14,8 @@ pub const KeyCode = enum {
     right, left, down, up, period,
     comma, space, escape, enter, tab,
     backspace, insert, delete, plus, minus,
+
+    home, end,
     // zig fmt: on
 };
 

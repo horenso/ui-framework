@@ -14,7 +14,7 @@ const Vec2f = vec.Vec2f;
 const Vec4f = vec.Vec4f;
 
 const Scrollbar = struct {
-    const SIZE = 16.0;
+    const SIZE = 14.0;
 
     kind: enum { x, y },
     visible: bool = false,
