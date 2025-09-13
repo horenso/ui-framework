@@ -154,7 +154,7 @@ pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const 
     }
 }
 
-fn onLeft(self: *@This()) void {
+fn goOneLeft(self: *@This()) void {
     if (self.cursor.col > 0) {
         self.setCursorCol(self.cursor.col - 1);
     } else if (self.currentLine.node.prev) |prevLine| {
@@ -163,7 +163,7 @@ fn onLeft(self: *@This()) void {
     }
 }
 
-fn onRight(self: *@This()) void {
+fn goOneRight(self: *@This()) void {
     if (self.cursor.col < self.currentLine.data.items.len) {
         self.setCursorCol(self.cursor.col + 1);
     } else if (self.currentLine.node.next) |nextLine| {
@@ -172,7 +172,7 @@ fn onRight(self: *@This()) void {
     }
 }
 
-fn onUp(self: *@This()) void {
+fn goOneUp(self: *@This()) void {
     if (self.currentLine.node.prev) |prevLine| {
         self.currentLine = @fieldParentPtr("node", prevLine);
         self.setCursor(
@@ -182,7 +182,7 @@ fn onUp(self: *@This()) void {
     }
 }
 
-fn onDown(self: *@This()) void {
+fn goOneDown(self: *@This()) void {
     if (self.currentLine.node.next) |nextLine| {
         self.currentLine = @fieldParentPtr("node", nextLine);
         self.setCursor(
@@ -192,7 +192,7 @@ fn onDown(self: *@This()) void {
     }
 }
 
-fn onEnter(self: *@This()) !void {
+fn insertNewline(self: *@This()) !void {
     const newLine = try self.base.app.allocator.create(LineData);
     newLine.data = std.ArrayList(u32).empty;
     try newLine.data.appendSlice(self.base.app.allocator, self.currentLine.data.items[self.cursor.col..]);
@@ -202,7 +202,7 @@ fn onEnter(self: *@This()) !void {
     self.setCursor(self.cursor.row + 1, 0);
 }
 
-fn onBackspace(self: *@This()) !void {
+fn deleteOneBackward(self: *@This()) !void {
     std.log.debug("onBackspace", .{});
     if (self.cursor.col > 0) {
         _ = self.currentLine.data.orderedRemove(self.cursor.col - 1);
@@ -222,7 +222,7 @@ fn onBackspace(self: *@This()) !void {
     }
 }
 
-fn onDelete(self: *@This()) !void {
+fn deleteOneForward(self: *@This()) !void {
     if (self.cursor.col < self.currentLine.data.items.len) {
         _ = self.currentLine.data.orderedRemove(self.cursor.col);
         if (self.currentLine == self.longestLine) {
@@ -252,13 +252,13 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
                 return false;
             }
             switch (keyEvent.code) {
-                .left => self.onLeft(),
-                .right => self.onRight(),
-                .down => self.onDown(),
-                .up => self.onUp(),
-                .enter => try self.onEnter(),
-                .backspace => try self.onBackspace(),
-                .delete => try self.onDelete(),
+                .left => self.goOneLeft(),
+                .right => self.goOneRight(),
+                .down => self.goOneDown(),
+                .up => self.goOneUp(),
+                .enter => try self.insertNewline(),
+                .backspace => try self.deleteOneBackward(),
+                .delete => try self.deleteOneForward(),
                 else => return false,
             }
             return true;
