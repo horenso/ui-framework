@@ -43,10 +43,8 @@ pub const ClickEvent = struct {
 };
 
 pub const Event = union(enum) {
-    mouseEnterEvent: void,
-    mouseLeaveEvent: void,
-    clickEvent: ClickEvent,
-    mouseWheelEvent: Vec2f,
-    keyEvent: KeyEvent,
-    textEvent: TextEvent,
+    mouseClick: ClickEvent,
+    mouseWheel: Vec2f,
+    key: KeyEvent,
+    text: TextEvent,
 };

@@ -55,7 +55,7 @@ pub fn main() anyerror!void {
         while (app.inputQueue.pop()) |event| {
             std.log.debug("Event {any}", .{event});
             switch (event) {
-                .keyEvent => |keyEvent| {
+                .key => |keyEvent| {
                     if (keyEvent.type == .pressed) {
                         if (keyEvent.ctrl and keyEvent.code == .num1) {
                             const newFontSize: i32 = @intFromFloat(textInput.fontAtlas.height + 4);

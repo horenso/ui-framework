@@ -5,6 +5,7 @@ const sdl = @import("../sdl.zig").sdl;
 const Application = @import("../Application.zig");
 const Color = Renderer.Color;
 const Event = @import("../event.zig").Event;
+const RectF = Renderer.RectF;
 const Renderer = @import("../Renderer.zig");
 const Widget = @import("./Widget.zig");
 
@@ -13,35 +14,43 @@ const Vec2f = vec.Vec2f;
 const Vec4f = vec.Vec4f;
 
 const Scrollbar = struct {
-    visible: bool,
-    length: f32,
-    thumbPos: f32,
-    thumbLength: f32,
+    const SIZE = 16.0;
+
+    kind: enum { x, y },
+    visible: bool = false,
+    length: f32 = 0,
+    thumbPos: f32 = 0,
+    thumbLength: f32 = 0,
+
+    fn isInside(self: *@This(), size: Vec2f, pos: Vec2f) bool {
+        if (self.kind == .x) {
+            return pos[0] >= size[0] - SIZE and
+                pos[0] <= size[0] and
+                pos[1] <= size[1];
+        } else {
+            return pos[1] >= size[1] - SIZE and
+                pos[1] <= size[1] and
+                pos[0] <= size[0];
+        }
+    }
+
+    fn isInsideThumb(_: *@This(), _: Vec2f, _: Vec2f) bool {
+        return false;
+    }
 };
 
 const SCROLL_SPEED = 40.0;
 const SCROLL_SPEED_VEC: Vec2f = @splat(SCROLL_SPEED);
-const SCROLLBAR_SIZE = 16.0;
 
-const SCROLLBAR_BACKGROUND_COLOR = Color.init(0, 0, 0, 40);
-const SCROLLBAR_FOREGROUND_COLOR = Color.init(0, 0, 0, 200);
+const SCROLLBAR_BACKGROUND_COLOR = Color.init(200, 200, 200, 150);
+const SCROLLBAR_FOREGROUND_COLOR = Color.init(60, 60, 60, 128);
 
 base: Widget.Base,
 child: Widget,
 offset: Vec2f = .{ 0, 0 },
 
-scrollbarX: Scrollbar = .{
-    .visible = false,
-    .length = 0,
-    .thumbPos = 0,
-    .thumbLength = 0,
-},
-scrollbarY: Scrollbar = .{
-    .visible = false,
-    .length = 0,
-    .thumbPos = 0,
-    .thumbLength = 0,
-},
+scrollbarX: Scrollbar = .{ .kind = .x },
+scrollbarY: Scrollbar = .{ .kind = .y },
 
 pub fn init(app: *Application, child: Widget) @This() {
     return .{
@@ -72,7 +81,7 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     self.scrollbarY.visible = contentSize[1] > self.base.size[1];
 
     if (self.scrollbarX.visible) {
-        const spaceForOtherScrollbar: f32 = if (self.scrollbarY.visible) SCROLLBAR_SIZE else 0;
+        const spaceForOtherScrollbar: f32 = if (self.scrollbarY.visible) Scrollbar.SIZE else 0;
         self.scrollbarX.length = self.base.size[0] - spaceForOtherScrollbar;
 
         const ratio = (self.base.size[0] - spaceForOtherScrollbar) / contentSize[0];
@@ -83,7 +92,7 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     }
 
     if (self.scrollbarY.visible) {
-        const spaceForOtherScrollbar: f32 = if (self.scrollbarX.visible) SCROLLBAR_SIZE else 0;
+        const spaceForOtherScrollbar: f32 = if (self.scrollbarX.visible) Scrollbar.SIZE else 0;
         self.scrollbarY.length = self.base.size[1] - spaceForOtherScrollbar;
 
         const ratio = (self.base.size[1] - spaceForOtherScrollbar) / contentSize[1];
@@ -94,58 +103,51 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     }
 }
 
-pub fn draw(opaquePtr: *const anyopaque) !void {
+pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
-    const renderer = self.base.app.renderer;
 
-    // // Clip to scroll container
-    // const clip: sdl.SDL_Rect = .{
-    //     .x = @intFromFloat(self.offset[0]),
-    //     .y = @intFromFloat(self.offset[1]),
-    //     .w = @intFromFloat(self.base.size[0]),
-    //     .h = @intFromFloat(self.base.size[1]),
-    // };
-    // _ = sdl.SDL_SetRenderClipRect(@ptrCast(renderer), &clip);
-    // defer _ = sdl.SDL_SetRenderClipRect(@ptrCast(renderer), null);
+    {
+        const prevOffset = renderer.offset;
+        renderer.offset -= self.offset;
+        defer renderer.offset = prevOffset;
 
-    // // Save previous viewport
-    // var prevViewport: sdl.SDL_Rect = undefined;
-    // _ = sdl.SDL_GetRenderViewport(@ptrCast(renderer), &prevViewport);
-    // defer _ = sdl.SDL_SetRenderViewport(@ptrCast(renderer), &prevViewport);
-
-    // // Translate child by offset inside scroll container
-    // const childViewport: sdl.SDL_Rect = .{
-    //     .x = clip.x - @as(c_int, @intFromFloat(self.offset[0])),
-    //     .y = clip.y - @as(c_int, @intFromFloat(self.offset[1])),
-    //     .w = clip.w,
-    //     .h = clip.h,
-    // };
-    // _ = sdl.SDL_SetRenderViewport(@ptrCast(renderer), &childViewport);
-
-    try self.child.draw();
-
-    if (self.scrollbarY.visible) {
-        renderer.fillRect(.{
-            .x = self.base.size[0] - SCROLLBAR_SIZE,
-            .y = self.scrollbarY.thumbPos,
-            .w = SCROLLBAR_SIZE,
-            .h = self.scrollbarY.thumbLength,
-        }, SCROLLBAR_FOREGROUND_COLOR);
+        try self.child.draw(renderer);
     }
+
     if (self.scrollbarX.visible) {
         renderer.fillRect(.{
+            .x = 0,
+            .y = self.base.size[1] - Scrollbar.SIZE,
+            .w = self.base.size[0],
+            .h = Scrollbar.SIZE,
+        }, SCROLLBAR_BACKGROUND_COLOR);
+        renderer.fillRect(.{
             .x = self.scrollbarX.thumbPos,
-            .y = self.base.size[1] - SCROLLBAR_SIZE,
+            .y = self.base.size[1] - Scrollbar.SIZE,
             .w = self.scrollbarX.thumbLength,
-            .h = SCROLLBAR_SIZE,
+            .h = Scrollbar.SIZE,
+        }, SCROLLBAR_FOREGROUND_COLOR);
+    }
+    if (self.scrollbarY.visible) {
+        renderer.fillRect(.{
+            .x = self.base.size[0] - Scrollbar.SIZE,
+            .y = 0,
+            .w = Scrollbar.SIZE,
+            .h = self.base.size[1],
+        }, SCROLLBAR_BACKGROUND_COLOR);
+        renderer.fillRect(.{
+            .x = self.base.size[0] - Scrollbar.SIZE,
+            .y = self.scrollbarY.thumbPos,
+            .w = Scrollbar.SIZE,
+            .h = self.scrollbarY.thumbLength,
         }, SCROLLBAR_FOREGROUND_COLOR);
     }
 }
 
 pub fn getMaxScroll(self: *@This(), size: Vec2f, contentSize: Vec2f) Vec2f {
     const upperUnbound: Vec2f = .{
-        contentSize[0] - size[0] + @as(f32, if (self.scrollbarY.visible) SCROLLBAR_SIZE else 0),
-        contentSize[1] - size[1] + @as(f32, if (self.scrollbarX.visible) SCROLLBAR_SIZE else 0),
+        contentSize[0] - size[0] + @as(f32, if (self.scrollbarY.visible) Scrollbar.SIZE else 0),
+        contentSize[1] - size[1] + @as(f32, if (self.scrollbarX.visible) Scrollbar.SIZE else 0),
     };
     return .{
         @max(0, upperUnbound[0]),
@@ -161,20 +163,9 @@ fn setAndClampOffset(self: *@This(), contentSize: Vec2f, newOffset: Vec2f) void 
     };
 }
 
-pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
-    const self: *@This() = @ptrCast(@alignCast(opaquePtr));
-
-    const e = if (event == .clickEvent) blk: {
-        var newClickEvent = event;
-        newClickEvent.clickEvent.pos += self.offset;
-        break :blk newClickEvent;
-    } else event;
-    const childHandledEvent = try self.child.handleEvent(e);
-    if (childHandledEvent) {
-        return true;
-    }
+fn handleOwnEvent(self: *@This(), event: Event) bool {
     switch (event) {
-        .mouseWheelEvent => |mouseWheelMove| {
+        .mouseWheel => |mouseWheelMove| {
             const contentSize = self.child.getMaxContentSize();
 
             const canScrollX = contentSize[0] > self.base.size[0];
@@ -191,8 +182,36 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
 
             return canScrollX or canScrollY;
         },
-        else => return true,
+        .mouseClick => |mouseClick| {
+            if (mouseClick.button == .left and self.scrollbarX.isInside(self.base.size, mouseClick.pos)) {
+                std.log.debug("clicked on scrollbarX", .{});
+                return true;
+            }
+            if (mouseClick.button == .left and self.scrollbarY.isInside(self.base.size, mouseClick.pos)) {
+                std.log.debug("clicked on scrollbarY", .{});
+                return true;
+            }
+            return false;
+        },
+        else => return false,
     }
+}
+
+pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
+    const self: *@This() = @ptrCast(@alignCast(opaquePtr));
+
+    if (self.handleOwnEvent(event)) {
+        return true;
+    }
+
+    const e = if (event == .mouseClick) blk: {
+        var newClickEvent = event;
+        newClickEvent.mouseClick.pos += self.offset;
+        break :blk newClickEvent;
+    } else event;
+    const childHandledEvent = try self.child.handleEvent(e);
+
+    return childHandledEvent;
 }
 
 pub fn widget(self: *@This()) Widget {
@@ -221,7 +240,7 @@ pub fn getSize(opaquePtr: *const anyopaque) Vec2f {
 // Get the size exclusive the visible scrollbars.
 pub fn getVisibleSize(self: *@This()) Vec2f {
     return .{
-        @max(0, self.base.size[0] - @as(f32, if (self.scrollbarY.visible) SCROLLBAR_SIZE else 0)),
-        @max(0, self.base.size[1] - @as(f32, if (self.scrollbarX.visible) SCROLLBAR_SIZE else 0)),
+        @max(0, self.base.size[0] - @as(f32, if (self.scrollbarY.visible) Scrollbar.SIZE else 0)),
+        @max(0, self.base.size[1] - @as(f32, if (self.scrollbarX.visible) Scrollbar.SIZE else 0)),
     };
 }

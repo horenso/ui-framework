@@ -69,6 +69,10 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
         return error.InitFailure;
     };
 
+    if (!sdl.SDL_SetRenderDrawBlendMode(@ptrCast(sdlRenderer), sdl.SDL_BLENDMODE_BLEND)) {
+        std.log.warn("Could not enable blend mode: {s}", .{sdl.SDL_GetError()});
+    }
+
     if (!sdl.SDL_SetRenderVSync(sdlRenderer, 1)) {
         std.log.warn("Could not enable VSync: {s}", .{sdl.SDL_GetError()});
     }
@@ -116,7 +120,7 @@ pub fn layout(self: *@This(), topWidget: *Widget) void {
 
 pub fn draw(self: *@This(), topWidget: *Widget) !void {
     self.renderer.clear(Color.init(255, 255, 255, 255));
-    try topWidget.draw();
+    try topWidget.draw(&self.renderer);
     self.renderer.present();
 }
 
@@ -190,7 +194,7 @@ fn handleKeyEvent(self: *@This(), sdlScancode: sdl.SDL_Scancode, sdlEventType: u
     };
 
     var newEvent: Event = .{
-        .keyEvent = .{
+        .key = .{
             .code = keyCode,
             .ctrl = ctrl,
             .shift = shift,
@@ -201,7 +205,7 @@ fn handleKeyEvent(self: *@This(), sdlScancode: sdl.SDL_Scancode, sdlEventType: u
 
     try self.inputQueue.append(self.allocator, newEvent);
     if (eventType == .up) {
-        newEvent.keyEvent.type = .pressed;
+        newEvent.key.type = .pressed;
         try self.inputQueue.append(self.allocator, newEvent);
     }
 }
@@ -222,7 +226,7 @@ pub fn pollEvents(self: *@This()) !void {
             },
             sdl.SDL_EVENT_MOUSE_WHEEL => {
                 try self.inputQueue.append(self.allocator, .{
-                    .mouseWheelEvent = .{
+                    .mouseWheel = .{
                         sdlEvent.wheel.x,
                         sdlEvent.wheel.y,
                     },
@@ -235,7 +239,7 @@ pub fn pollEvents(self: *@This()) !void {
                     sdl.SDL_BUTTON_RIGHT => .right,
                     else => continue,
                 };
-                try self.inputQueue.append(self.allocator, .{ .clickEvent = .{
+                try self.inputQueue.append(self.allocator, .{ .mouseClick = .{
                     .pos = .{ sdlEvent.button.x, sdlEvent.button.y },
                     .button = btn,
                 } });
@@ -251,7 +255,7 @@ pub fn pollEvents(self: *@This()) !void {
                 const utf8Viewer = try std.unicode.Utf8View.init(cStringText[0..std.mem.len(cStringText)]);
                 var it = utf8Viewer.iterator();
                 while (it.nextCodepoint()) |codepoint| {
-                    try self.inputQueue.append(self.allocator, .{ .textEvent = .{ .char = codepoint } });
+                    try self.inputQueue.append(self.allocator, .{ .text = .{ .char = codepoint } });
                 }
             },
             else => {},

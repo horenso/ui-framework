@@ -4,6 +4,7 @@ const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
 const Event = @import("../event.zig").Event;
+const Renderer = @import("../Renderer.zig");
 
 const vec = @import("../vec.zig");
 const Vec2f = vec.Vec2f;
@@ -21,7 +22,7 @@ pub const Base = struct {
 pub const VTable = struct {
     deinit: *const fn (*anyopaque) void,
     layout: *const fn (*anyopaque, size: Vec2f) void,
-    draw: *const fn (*const anyopaque) anyerror!void,
+    draw: *const fn (*const anyopaque, renderer: *Renderer) anyerror!void,
     /// Returns true if the event was handled, false otherwise.
     handleEvent: *const fn (*anyopaque, event: Event) anyerror!bool,
     getMaxContentSize: *const fn (*const anyopaque) Vec2f,
@@ -41,7 +42,7 @@ pub fn layout(self: @This(), size: Vec2f) void {
     return self.vtable.layout(self.ptr, size);
 }
 
-pub fn draw(self: @This()) anyerror!void {
+pub fn draw(self: @This(), renderer: *Renderer) anyerror!void {
     const size = self.getSize();
 
     _ = size;
@@ -58,7 +59,7 @@ pub fn draw(self: @This()) anyerror!void {
     // }
     // defer sdl.SDL_SetRenderClipRect(@ptrCast(self.renderer), null);
 
-    try self.vtable.draw(self.ptr);
+    try self.vtable.draw(self.ptr, renderer);
 }
 
 pub fn handleEvent(self: @This(), event: Event) anyerror!bool {

@@ -19,6 +19,7 @@ const Vec2i = vec.Vec2i;
 
 const INITIAL_FONT_WIDTH = 30;
 const CURSOR_COLOR = Color.init(0, 0, 0, 160);
+const TEXT_COLOR = Color.init(0, 0, 0, 255);
 const GRID_LINES_COLOR = Color.init(150, 150, 150, 255);
 
 const LineData = struct {
@@ -246,7 +247,7 @@ pub fn deinit(opaquePtr: *anyopaque) void {
 pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     switch (event) {
-        .keyEvent => |keyEvent| {
+        .key => |keyEvent| {
             if (keyEvent.type != .down) {
                 return false;
             }
@@ -262,7 +263,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
             }
             return true;
         },
-        .textEvent => |textEvent| {
+        .text => |textEvent| {
             try self.currentLine.data.insert(self.base.app.allocator, self.cursor.col, textEvent.char);
             if (self.currentLine.data.items.len > self.longestLine.data.items.len) {
                 self.longestLine = self.currentLine;
@@ -271,7 +272,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
 
             return true;
         },
-        .clickEvent => |clickEvent| {
+        .mouseClick => |clickEvent| {
             // This is the cell the user clicked on, now we need to figure out if it's within the text
             const targetRow: usize = @intFromFloat(clickEvent.pos[1] / self.fontAtlas.height);
             const targetCol: usize = @intFromFloat(@round(clickEvent.pos[0] / self.fontAtlas.width));
@@ -284,15 +285,14 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
                     break;
                 }
                 currentNode = node.next;
-                index += 1;
+                if (node.next != null) {
+                    index += 1;
+                }
             }
             self.setCursor(
                 @min(targetRow, index),
                 @min(targetCol, self.currentLine.data.items.len),
             );
-
-            std.log.debug("click {any} {any} {any}", .{ targetRow, targetCol, self.cursor });
-
             return true;
         },
         else => return false,
@@ -321,7 +321,7 @@ fn getCursorWidth(fontWidth: f32) f32 {
     return @max(1, @abs(scaled));
 }
 
-fn drawText(self: *const @This()) void {
+fn drawText(self: *const @This(), renderer: *Renderer) void {
     var it = self.lines.first;
     var index: usize = 0;
 
@@ -342,37 +342,18 @@ fn drawText(self: *const @This()) void {
                 .w = maxContentSize[0],
                 .h = self.fontAtlas.height,
             };
-            const renderer = self.base.app.renderer;
             renderer.fillRect(rect, Color.init(200, 200, 100, 100));
         }
 
         var penX: f32 = 0;
-        for (codepoints) |cp| {
-            // TODO error handling
-            const glyph = self.fontAtlas.getGlyph(self.base.app.allocator, cp) catch unreachable;
-
-            const tex_size: f32 = 1024;
-            const src_rect: sdl.SDL_FRect = .{
-                .x = glyph.uv[0] * tex_size,
-                .y = (glyph.uv[1] * tex_size),
-                .w = @floatFromInt(glyph.size[0]),
-                .h = @floatFromInt(glyph.size[1]),
-            };
-
-            const dst_rect: sdl.SDL_FRect = .{
-                .x = penX + @as(f32, @floatFromInt(glyph.bearing[0])),
-                .y = y + self.fontAtlas.height - @as(f32, @floatFromInt(glyph.bearing[1])) + self.fontAtlas.baseline,
-                //  + @as(f32, @floatFromInt(glyph.bearing[1])) + @as(f32, @floatFromInt(glyph.size[1])),
-                // self.fontAtlas.baseline,
-                .w = @floatFromInt(glyph.size[0]),
-                .h = @floatFromInt(glyph.size[1]),
-            };
-
-            const renderer = self.base.app.renderer.sdlRenderer;
-            _ = sdl.SDL_SetTextureColorMod(self.fontAtlas.texture, 0, 0, 0);
-            _ = sdl.SDL_RenderTexture(@ptrCast(renderer), self.fontAtlas.texture, &src_rect, &dst_rect);
-            _ = sdl.SDL_SetTextureColorMod(self.fontAtlas.texture, 255, 255, 255);
-
+        for (codepoints) |codepoint| {
+            renderer.drawCharacter(
+                self.base.app.allocator,
+                codepoint,
+                self.fontAtlas,
+                .{ penX, y },
+                TEXT_COLOR,
+            );
             penX += self.fontAtlas.width;
         }
 
@@ -381,8 +362,7 @@ fn drawText(self: *const @This()) void {
     }
 }
 
-fn drawGridLines(self: *const @This()) void {
-    const renderer = self.base.app.renderer;
+fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
     const cellHeight = self.fontAtlas.height;
     const cellWidth = self.fontAtlas.width;
 
@@ -421,14 +401,14 @@ fn drawGridLines(self: *const @This()) void {
     }
 }
 
-pub fn draw(opaquePtr: *const anyopaque) !void {
+pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     // rl.clearBackground(rl.Color.white);
 
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
-    self.drawText();
+    self.drawText(renderer);
     if (self.showGrid) {
-        self.drawGridLines();
+        self.drawGridLines(renderer);
     }
 
     self.base.app.renderer.fillRect(.{
@@ -468,8 +448,6 @@ pub fn setCursor(self: *@This(), row: usize, col: usize) void {
 
     self.cursor.x = self.fontAtlas.width * @as(f32, @floatFromInt(self.cursor.col));
     self.cursor.y = self.fontAtlas.height * @as(f32, @floatFromInt(self.cursor.row));
-
-    std.log.debug("cursor{d}:{d}", .{ row, col });
 
     self.scrollProxy.ensureVisible(
         .{ self.cursor.x, self.cursor.y },
