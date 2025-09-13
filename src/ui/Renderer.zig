@@ -79,7 +79,7 @@ pub fn init(sdlRenderer: *sdl.SDL_Renderer) @This() {
         sdl.SDL_TEXTUREACCESS_STATIC,
         4,
         4,
-    ) orelse unreachable;
+    ) orelse @panic("unexpected");
 
     _ = sdl.SDL_UpdateTexture(checkerTexture, null, &pixels, 4 * @sizeOf(u32));
     _ = sdl.SDL_SetTextureScaleMode(checkerTexture, sdl.SDL_SCALEMODE_NEAREST);
@@ -164,7 +164,7 @@ pub fn createTexture(self: @This()) Texture {
         sdl.SDL_TEXTUREACCESS_STREAMING,
         1024,
         1024,
-    ) orelse unreachable;
+    ) orelse @panic("unexpected");
     return .{ .sdlTexture = sdlTexture };
 }
 
@@ -177,7 +177,7 @@ pub fn drawCharacter(
     color: Color,
 ) void {
     // TODO error handling
-    const glyph = fontAtlas.getGlyph(allocator, codepoint) catch unreachable;
+    const glyph = fontAtlas.getGlyph(allocator, codepoint) catch @panic("unexpected");
 
     const tex_size: f32 = 1024;
     const src_rect: sdl.SDL_FRect = .{
@@ -194,7 +194,7 @@ pub fn drawCharacter(
         .h = @floatFromInt(glyph.size[1]),
     };
 
-    if (!sdl.SDL_SetTextureColorMod(fontAtlas.texture, color.r, color.g, color.b)) unreachable;
-    if (!sdl.SDL_RenderTexture(@ptrCast(self.sdlRenderer), fontAtlas.texture, &src_rect, &dst_rect)) unreachable;
-    if (!sdl.SDL_SetTextureColorMod(fontAtlas.texture, 255, 255, 255)) unreachable;
+    if (!sdl.SDL_SetTextureColorMod(fontAtlas.texture, color.r, color.g, color.b)) @panic("unexpected");
+    if (!sdl.SDL_RenderTexture(@ptrCast(self.sdlRenderer), fontAtlas.texture, &src_rect, &dst_rect)) @panic("unexpected");
+    if (!sdl.SDL_SetTextureColorMod(fontAtlas.texture, 255, 255, 255)) @panic("unexpected");
 }

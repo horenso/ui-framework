@@ -30,6 +30,8 @@ const LineData = struct {
 const Cursor = struct {
     row: usize = 0,
     col: usize = 0,
+    /// Remember the col we were at when going up or down
+    preferredCol: usize = 0,
     x: f32 = 0,
     y: f32 = 0,
     width: f32,
@@ -124,7 +126,7 @@ fn makeNewLine(self: *@This()) !*LineData {
 }
 
 pub fn changeFontSize(self: *@This(), fontManager: *FontManager, fontSize: i32) void {
-    self.fontAtlas = fontManager.getFontAtlas(self.base.app.allocator, self.base.app.renderer, fontSize) catch unreachable;
+    self.fontAtlas = fontManager.getFontAtlas(self.base.app.allocator, self.base.app.renderer, fontSize) catch @panic("unexpected");
     self.cursor.width = getCursorWidth(self.fontAtlas.width);
 }
 
@@ -156,19 +158,19 @@ pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const 
 
 fn goOneLeft(self: *@This()) void {
     if (self.cursor.col > 0) {
-        self.setCursorCol(self.cursor.col - 1);
+        self.setCursorCol(self.cursor.col - 1, true);
     } else if (self.currentLine.node.prev) |prevLine| {
         self.currentLine = @fieldParentPtr("node", prevLine);
-        self.setCursor(self.cursor.row - 1, self.currentLine.data.items.len);
+        self.setCursor(self.cursor.row - 1, self.currentLine.data.items.len, true);
     }
 }
 
 fn goOneRight(self: *@This()) void {
     if (self.cursor.col < self.currentLine.data.items.len) {
-        self.setCursorCol(self.cursor.col + 1);
+        self.setCursorCol(self.cursor.col + 1, true);
     } else if (self.currentLine.node.next) |nextLine| {
         self.currentLine = @fieldParentPtr("node", nextLine);
-        self.setCursor(self.cursor.row + 1, self.cursor.col);
+        self.setCursor(self.cursor.row + 1, 0, true);
     }
 }
 
@@ -177,7 +179,8 @@ fn goOneUp(self: *@This()) void {
         self.currentLine = @fieldParentPtr("node", prevLine);
         self.setCursor(
             self.cursor.row - 1,
-            @min(self.currentLine.data.items.len, self.cursor.col),
+            @min(self.currentLine.data.items.len, self.cursor.preferredCol),
+            false,
         );
     }
 }
@@ -187,31 +190,38 @@ fn goOneDown(self: *@This()) void {
         self.currentLine = @fieldParentPtr("node", nextLine);
         self.setCursor(
             self.cursor.row + 1,
-            @min(self.currentLine.data.items.len, self.cursor.col),
+            @min(self.currentLine.data.items.len, self.cursor.preferredCol),
+            false,
         );
     }
 }
 
-fn insertNewline(self: *@This()) !void {
-    const newLine = try self.base.app.allocator.create(LineData);
-    newLine.data = std.ArrayList(u32).empty;
+fn splitLine(self: *@This()) !void {
+    const newLine = try self.makeNewLine();
     try newLine.data.appendSlice(self.base.app.allocator, self.currentLine.data.items[self.cursor.col..]);
     self.currentLine.data.shrinkAndFree(self.base.app.allocator, self.cursor.col);
     self.lines.insertAfter(&self.currentLine.node, &newLine.node);
     self.currentLine = newLine;
-    self.setCursor(self.cursor.row + 1, 0);
+    self.setCursor(self.cursor.row + 1, 0, true);
+}
+
+fn insertNewlineBelow(self: *@This()) !void {
+    const newLine = try self.makeNewLine();
+    self.lines.insertAfter(&self.currentLine.node, &newLine.node);
+    self.currentLine = newLine;
+    self.setCursor(self.cursor.row + 1, 0, true);
 }
 
 fn deleteOneBackward(self: *@This()) !void {
     std.log.debug("onBackspace", .{});
     if (self.cursor.col > 0) {
         _ = self.currentLine.data.orderedRemove(self.cursor.col - 1);
-        self.setCursorCol(self.cursor.col - 1);
+        self.setCursorCol(self.cursor.col - 1, true);
     } else if (self.currentLine.node.prev) |prevLine| {
         self.lines.remove(&self.currentLine.node);
 
         const line: *LineData = @fieldParentPtr("node", prevLine);
-        self.setCursor(self.cursor.row - 1, line.data.items.len);
+        self.setCursor(self.cursor.row - 1, line.data.items.len, true);
 
         try line.data.appendSlice(self.base.app.allocator, self.currentLine.data.items[0..]);
         self.currentLine.data.deinit(self.base.app.allocator);
@@ -256,7 +266,13 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
                 .right => self.goOneRight(),
                 .down => self.goOneDown(),
                 .up => self.goOneUp(),
-                .enter => try self.insertNewline(),
+                .enter => {
+                    if (keyEvent.ctrl) {
+                        try self.insertNewlineBelow();
+                    } else {
+                        try self.splitLine();
+                    }
+                },
                 .backspace => try self.deleteOneBackward(),
                 .delete => try self.deleteOneForward(),
                 else => return false,
@@ -268,7 +284,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
             if (self.currentLine.data.items.len > self.longestLine.data.items.len) {
                 self.longestLine = self.currentLine;
             }
-            self.setCursorCol(self.cursor.col + 1);
+            self.setCursorCol(self.cursor.col + 1, true);
 
             return true;
         },
@@ -292,6 +308,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
             self.setCursor(
                 @min(targetRow, index),
                 @min(targetCol, self.currentLine.data.items.len),
+                true,
             );
             return true;
         },
@@ -435,16 +452,20 @@ pub fn setOffset(opaquePtr: *anyopaque, offset: Vec2f) void {
 }
 
 pub fn setCursorRow(self: *@This(), row: usize) void {
-    self.setCursor(self, row, self.cursor.col);
+    self.setCursor(self, row, self.cursor.col, false);
 }
 
-pub fn setCursorCol(self: *@This(), col: usize) void {
-    self.setCursor(self.cursor.row, col);
+pub fn setCursorCol(self: *@This(), col: usize, overridePreferedCol: bool) void {
+    self.setCursor(self.cursor.row, col, overridePreferedCol);
 }
 
-pub fn setCursor(self: *@This(), row: usize, col: usize) void {
+pub fn setCursor(self: *@This(), row: usize, col: usize, overridePreferedCol: bool) void {
     self.cursor.row = row;
     self.cursor.col = col;
+
+    if (overridePreferedCol) {
+        self.cursor.preferredCol = col;
+    }
 
     self.cursor.x = self.fontAtlas.width * @as(f32, @floatFromInt(self.cursor.col));
     self.cursor.y = self.fontAtlas.height * @as(f32, @floatFromInt(self.cursor.row));
