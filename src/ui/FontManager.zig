@@ -111,6 +111,7 @@ pub fn getFontAtlas(
         .nextX = 0,
         .nextY = 0,
         .rowHeight = 0,
+        .fontSize = size,
         .width = width,
         .height = height,
         .baseline = baseline,
@@ -138,6 +139,7 @@ pub const FontAtlas = struct {
     nextY: i32,
     rowHeight: i32,
 
+    fontSize: i32,
     width: f32,
     height: f32,
     baseline: f32,

@@ -11,6 +11,7 @@ const RectF = Renderer.RectF;
 const Renderer = @import("../Renderer.zig");
 const ScrollContainer = @import("./ScrollContainer.zig");
 const ScrollProxy = @import("./ScrollProxy.zig");
+const Utf8Reader = @import("../Utf8Reader.zig");
 
 const vec = @import("../vec.zig");
 const Vec2f = vec.Vec2f;
@@ -132,21 +133,23 @@ fn makeNewLine(self: *@This()) !*LineData {
 pub fn changeFontSize(self: *@This(), fontManager: *FontManager, fontSize: i32) void {
     self.fontAtlas = fontManager.getFontAtlas(self.base.app.allocator, self.base.app.renderer, fontSize) catch @panic("unexpected");
     self.cursor.width = getCursorWidth(self.fontAtlas.width);
+    std.log.debug("new font size {d}", .{fontSize});
 }
 
-pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const u8) !void {
+pub fn load(self: *@This(), allocator: std.mem.Allocator, reader: *std.Io.Reader) !void {
     self.deinitLines();
 
-    var splitIterator = std.mem.splitSequence(u8, utf8Text, "\n");
-    while (splitIterator.next()) |line| {
-        var newLine = try self.makeNewLine();
-        self.lines.append(&newLine.node);
+    var utf8Reader = Utf8Reader.init(reader);
 
-        var viewer = try std.unicode.Utf8View.init(line);
-        var it = viewer.iterator();
+    var currentLine = try self.makeNewLine();
+    self.lines.append(&currentLine.node);
 
-        while (it.nextCodepoint()) |cp| {
-            try newLine.data.append(allocator, @intCast(cp));
+    while (try utf8Reader.nextCodepoint()) |codepoint| {
+        if (codepoint == '\n') {
+            currentLine = try self.makeNewLine();
+            self.lines.append(&currentLine.node);
+        } else {
+            try currentLine.data.append(allocator, @intCast(codepoint));
         }
     }
     if (self.lines.first) |firstLine| {
@@ -158,6 +161,22 @@ pub fn loadText(self: *@This(), allocator: std.mem.Allocator, utf8Text: []const 
         self.currentLine = newLine;
         self.longestLine = newLine;
     }
+}
+
+pub fn save(self: *@This(), writer: *std.Io.Writer) !void {
+    var it = self.lines.first;
+    while (it) |line| {
+        for (LineData.getFromNode(line).data.items) |codepoint| {
+            var buffer: [4]u8 = .{ 0, 0, 0, 0 };
+            const encodedLength = try std.unicode.utf8Encode(@intCast(codepoint), &buffer);
+            _ = try writer.write(buffer[0..encodedLength]);
+        }
+        if (line.next != null) {
+            _ = try writer.write("\n");
+        }
+        it = line.next;
+    }
+    try writer.flush();
 }
 
 fn goOneLeft(self: *@This()) void {
@@ -272,6 +291,16 @@ fn deleteOneForward(self: *@This()) !void {
     }
 }
 
+fn goToNextWord(self: *@This()) void {
+    // TODO: implement go to next word
+    self.goOneRight();
+}
+
+fn goToPreviousWord(self: *@This()) void {
+    // TODO: implement go to previous word
+    self.goOneLeft();
+}
+
 pub fn deinit(opaquePtr: *anyopaque) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     self.deinitLines();
@@ -285,8 +314,20 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
                 return false;
             }
             switch (keyEvent.code) {
-                .left => self.goOneLeft(),
-                .right => self.goOneRight(),
+                .left => {
+                    if (keyEvent.ctrl) {
+                        self.goToPreviousWord();
+                    } else {
+                        self.goOneLeft();
+                    }
+                },
+                .right => {
+                    if (keyEvent.ctrl) {
+                        self.goToNextWord();
+                    } else {
+                        self.goOneRight();
+                    }
+                },
                 .down => self.goOneDown(),
                 .up => self.goOneUp(),
                 .enter => {
