@@ -291,6 +291,26 @@ fn deleteOneForward(self: *@This()) !void {
     }
 }
 
+fn deleteCurrentLine(self: *@This()) !void {
+    const prev = self.currentLine.node.prev;
+    const next = self.currentLine.node.next;
+
+    self.lines.remove(&self.currentLine.node);
+    self.base.app.allocator.destroy(self.currentLine);
+
+    if (next) |nextLine| {
+        self.currentLine = LineData.getFromNode(nextLine);
+        self.setCursorCol(0, true);
+    } else if (prev) |prevLine| {
+        self.currentLine = LineData.getFromNode(prevLine);
+        self.setCursor(self.cursor.row - 1, 0, true);
+    } else {
+        const newLine = try self.makeNewLine();
+        self.lines.append(&newLine.node);
+    }
+    self.findLongestLine();
+}
+
 fn goToNextWord(self: *@This()) void {
     // TODO: implement go to next word
     self.goOneRight();
@@ -351,6 +371,11 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
                         self.goToLastLine();
                     } else {
                         self.goToEndOfLine();
+                    }
+                },
+                .d => {
+                    if (keyEvent.ctrl) {
+                        try self.deleteCurrentLine();
                     }
                 },
                 else => return false,
