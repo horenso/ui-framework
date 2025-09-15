@@ -49,11 +49,6 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
         return error.InitFailure;
     }
 
-    // Tell SDL to create an OpenGL window
-    _ = sdl.SDL_GL_SetAttribute(sdl.SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    _ = sdl.SDL_GL_SetAttribute(sdl.SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    _ = sdl.SDL_GL_SetAttribute(sdl.SDL_GL_CONTEXT_PROFILE_MASK, sdl.SDL_GL_CONTEXT_PROFILE_CORE);
-
     const window = sdl.SDL_CreateWindow(
         config.title,
         config.width,
@@ -69,7 +64,7 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
         return error.InitFailure;
     };
 
-    if (!sdl.SDL_SetRenderDrawBlendMode(@ptrCast(sdlRenderer), sdl.SDL_BLENDMODE_BLEND)) {
+    if (!sdl.SDL_SetRenderDrawBlendMode(sdlRenderer, sdl.SDL_BLENDMODE_BLEND)) {
         std.log.warn("Could not enable blend mode: {s}", .{sdl.SDL_GetError()});
     }
 

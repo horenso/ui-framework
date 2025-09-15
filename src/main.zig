@@ -76,10 +76,10 @@ pub fn main() anyerror!void {
                     if (keyEvent.type == .pressed) {
                         if (keyEvent.ctrl and keyEvent.code == .num1) {
                             const newFontSize: i32 = @min(textInput.fontAtlas.fontSize + 4, 52);
-                            textInput.changeFontSize(&app.fontManager, newFontSize);
+                            textInput.setFontSize(&app.fontManager, newFontSize);
                         } else if (keyEvent.ctrl and keyEvent.code == .num2) {
                             const newFontSize: i32 = @max(textInput.fontAtlas.fontSize - 4, 12);
-                            textInput.changeFontSize(&app.fontManager, newFontSize);
+                            textInput.setFontSize(&app.fontManager, newFontSize);
                         } else if (keyEvent.ctrl and keyEvent.code == .num3) {
                             textInput.showGrid = !textInput.showGrid;
                         } else if (keyEvent.ctrl and keyEvent.code == .s) {

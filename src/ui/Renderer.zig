@@ -111,13 +111,13 @@ pub fn present(self: @This()) void {
 
 pub fn fillRect(self: @This(), rect: RectF, color: Color) void {
     _ = sdl.SDL_SetRenderDrawColor(
-        @ptrCast(self.sdlRenderer),
+        self.sdlRenderer,
         color.r,
         color.g,
         color.b,
         color.a,
     );
-    _ = sdl.SDL_RenderFillRect(@ptrCast(self.sdlRenderer), &.{
+    _ = sdl.SDL_RenderFillRect(self.sdlRenderer, &.{
         .x = rect.x + self.offset[0],
         .y = rect.y + self.offset[1],
         .w = rect.w,
@@ -142,14 +142,14 @@ pub fn fillRectPattern(self: *@This(), rect: RectF) void {
 
 pub fn line(self: @This(), p1: Vec2f, p2: Vec2f, color: Color) void {
     _ = sdl.SDL_SetRenderDrawColor(
-        @ptrCast(self.sdlRenderer),
+        self.sdlRenderer,
         color.r,
         color.g,
         color.b,
         color.a,
     );
     _ = sdl.SDL_RenderLine(
-        @ptrCast(self.sdlRenderer),
+        self.sdlRenderer,
         p1[0] + self.offset[0],
         p1[1] + self.offset[1],
         p2[0] + self.offset[0],
@@ -195,6 +195,6 @@ pub fn drawCharacter(
     };
 
     if (!sdl.SDL_SetTextureColorMod(fontAtlas.texture, color.r, color.g, color.b)) @panic("unexpected");
-    if (!sdl.SDL_RenderTexture(@ptrCast(self.sdlRenderer), fontAtlas.texture, &src_rect, &dst_rect)) @panic("unexpected");
+    if (!sdl.SDL_RenderTexture(self.sdlRenderer, fontAtlas.texture, &src_rect, &dst_rect)) @panic("unexpected");
     if (!sdl.SDL_SetTextureColorMod(fontAtlas.texture, 255, 255, 255)) @panic("unexpected");
 }

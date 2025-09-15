@@ -124,16 +124,17 @@ fn findLongestLine(self: *@This()) void {
     }
 }
 
-fn makeNewLine(self: *@This()) !*LineData {
+fn createNewLine(self: *@This()) !*LineData {
     const newLine = try self.base.app.allocator.create(LineData);
     newLine.data = std.ArrayList(u32).empty;
     return newLine;
 }
 
-pub fn changeFontSize(self: *@This(), fontManager: *FontManager, fontSize: i32) void {
+pub fn setFontSize(self: *@This(), fontManager: *FontManager, fontSize: i32) void {
     self.fontAtlas = fontManager.getFontAtlas(self.base.app.allocator, self.base.app.renderer, fontSize) catch @panic("unexpected");
     self.cursor.width = getCursorWidth(self.fontAtlas.width);
     std.log.debug("new font size {d}", .{fontSize});
+    self.calculateCursorPos();
 }
 
 pub fn load(self: *@This(), allocator: std.mem.Allocator, reader: *std.Io.Reader) !void {
@@ -141,12 +142,12 @@ pub fn load(self: *@This(), allocator: std.mem.Allocator, reader: *std.Io.Reader
 
     var utf8Reader = Utf8Reader.init(reader);
 
-    var currentLine = try self.makeNewLine();
+    var currentLine = try self.createNewLine();
     self.lines.append(&currentLine.node);
 
     while (try utf8Reader.nextCodepoint()) |codepoint| {
         if (codepoint == '\n') {
-            currentLine = try self.makeNewLine();
+            currentLine = try self.createNewLine();
             self.lines.append(&currentLine.node);
         } else {
             try currentLine.data.append(allocator, @intCast(codepoint));
@@ -156,7 +157,7 @@ pub fn load(self: *@This(), allocator: std.mem.Allocator, reader: *std.Io.Reader
         self.currentLine = LineData.getFromNode(firstLine);
         self.findLongestLine();
     } else {
-        const newLine = try self.makeNewLine();
+        const newLine = try self.createNewLine();
         self.lines.append(&newLine.node);
         self.currentLine = newLine;
         self.longestLine = newLine;
@@ -239,7 +240,7 @@ fn goToLastLine(self: *@This()) void {
 }
 
 fn splitLine(self: *@This()) !void {
-    const newLine = try self.makeNewLine();
+    const newLine = try self.createNewLine();
     try newLine.data.appendSlice(self.base.app.allocator, self.currentLine.data.items[self.cursor.col..]);
     self.currentLine.data.shrinkAndFree(self.base.app.allocator, self.cursor.col);
     self.lines.insertAfter(&self.currentLine.node, &newLine.node);
@@ -248,7 +249,7 @@ fn splitLine(self: *@This()) !void {
 }
 
 fn insertNewlineBelow(self: *@This()) !void {
-    const newLine = try self.makeNewLine();
+    const newLine = try self.createNewLine();
     self.lines.insertAfter(&self.currentLine.node, &newLine.node);
     self.currentLine = newLine;
     self.setCursor(self.cursor.row + 1, 0, true);
@@ -301,14 +302,17 @@ fn deleteCurrentLine(self: *@This()) !void {
     if (next) |nextLine| {
         self.currentLine = LineData.getFromNode(nextLine);
         self.setCursorCol(0, true);
+        self.findLongestLine();
     } else if (prev) |prevLine| {
         self.currentLine = LineData.getFromNode(prevLine);
         self.setCursor(self.cursor.row - 1, 0, true);
+        self.findLongestLine();
     } else {
-        const newLine = try self.makeNewLine();
+        const newLine = try self.createNewLine();
         self.lines.append(&newLine.node);
+        self.currentLine = newLine;
+        self.longestLine = newLine;
     }
-    self.findLongestLine();
 }
 
 fn goToNextWord(self: *@This()) void {
@@ -556,27 +560,31 @@ pub fn setOffset(opaquePtr: *anyopaque, offset: Vec2f) void {
     self.offset = offset;
 }
 
-pub fn setCursorRow(self: *@This(), row: usize) void {
+fn setCursorRow(self: *@This(), row: usize) void {
     self.setCursor(self, row, self.cursor.col, false);
 }
 
-pub fn setCursorCol(self: *@This(), col: usize, overridePreferedCol: bool) void {
-    self.setCursor(self.cursor.row, col, overridePreferedCol);
+fn setCursorCol(self: *@This(), col: usize, overridePreferredCol: bool) void {
+    self.setCursor(self.cursor.row, col, overridePreferredCol);
 }
 
-pub fn setCursor(self: *@This(), row: usize, col: usize, overridePreferedCol: bool) void {
+fn setCursor(self: *@This(), row: usize, col: usize, overridePreferredCol: bool) void {
     self.cursor.row = row;
     self.cursor.col = col;
 
-    if (overridePreferedCol) {
+    if (overridePreferredCol) {
         self.cursor.preferredCol = col;
     }
 
-    self.cursor.x = self.fontAtlas.width * @as(f32, @floatFromInt(self.cursor.col));
-    self.cursor.y = self.fontAtlas.height * @as(f32, @floatFromInt(self.cursor.row));
+    self.calculateCursorPos();
 
     self.scrollProxy.ensureVisible(
         .{ self.cursor.x, self.cursor.y },
         .{ self.cursor.width, self.fontAtlas.height },
     );
+}
+
+fn calculateCursorPos(self: *@This()) void {
+    self.cursor.x = self.fontAtlas.width * @as(f32, @floatFromInt(self.cursor.col));
+    self.cursor.y = self.fontAtlas.height * @as(f32, @floatFromInt(self.cursor.row));
 }
