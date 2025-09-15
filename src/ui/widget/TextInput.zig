@@ -58,7 +58,7 @@ showGrid: bool = false,
 
 pub fn init(app: *Application, renderer: Renderer, fontManager: *FontManager) !@This() {
     var lines: std.DoublyLinkedList = .{};
-    var emptyLine: *LineData = try app.allocator.create(LineData);
+    var emptyLine = try app.allocator.create(LineData);
     emptyLine.* = std.mem.zeroes(LineData);
     emptyLine.data = .empty;
     lines.append(&emptyLine.node);
@@ -103,7 +103,7 @@ inline fn deinitLines(self: *@This()) void {
     while (it) |currentNode| {
         it = currentNode.next;
 
-        const line: *LineData = LineData.getFromNode(currentNode);
+        const line = LineData.getFromNode(currentNode);
         self.lines.remove(currentNode);
         line.data.deinit(self.base.app.allocator);
         self.base.app.allocator.destroy(line);
@@ -116,7 +116,7 @@ fn findLongestLine(self: *@This()) void {
     while (it) |currentNode| {
         it = currentNode.next;
 
-        const line: *LineData = LineData.getFromNode(currentNode);
+        const line = LineData.getFromNode(currentNode);
         if (line.data.items.len > longest) {
             self.longestLine = line;
             longest = line.data.items.len;
@@ -263,7 +263,7 @@ fn deleteOneBackward(self: *@This()) !void {
     } else if (self.currentLine.node.prev) |prevLine| {
         self.lines.remove(&self.currentLine.node);
 
-        const line: *LineData = LineData.getFromNode(prevLine);
+        const line = LineData.getFromNode(prevLine);
         self.setCursor(self.cursor.row - 1, line.data.items.len, true);
 
         try line.data.appendSlice(self.base.app.allocator, self.currentLine.data.items[0..]);
@@ -282,7 +282,7 @@ fn deleteOneForward(self: *@This()) !void {
             self.findLongestLine();
         }
     } else if (self.currentLine.node.next) |nextLine| {
-        const line: *LineData = LineData.getFromNode(nextLine);
+        const line = LineData.getFromNode(nextLine);
         try self.currentLine.data.appendSlice(self.base.app.allocator, line.data.items[0..]);
         self.lines.remove(nextLine);
         line.data.deinit(self.base.app.allocator);
@@ -316,8 +316,25 @@ fn deleteCurrentLine(self: *@This()) !void {
 }
 
 fn goToNextWord(self: *@This()) void {
-    // TODO: implement go to next word
-    self.goOneRight();
+    var row = self.cursor.row;
+    var col = self.cursor.col;
+
+    while (true) {
+        if (col + 1 < self.currentLine.data.items.len) {
+            col += 1;
+        } else if (self.currentLine.node.next) |next| {
+            row += 1;
+            col = 0;
+            self.currentLine = LineData.getFromNode(next);
+            break;
+        } else {
+            break;
+        }
+        if (self.currentLine.data.items[col] == ' ') {
+            break;
+        }
+    }
+    self.setCursor(row, col, true);
 }
 
 fn goToPreviousWord(self: *@This()) void {
@@ -450,7 +467,7 @@ fn drawText(self: *const @This(), renderer: *Renderer) void {
     var index: usize = 0;
 
     while (it) |currentNode| {
-        const lineData: *LineData = LineData.getFromNode(currentNode);
+        const lineData = LineData.getFromNode(currentNode);
         const codepoints = lineData.data.items;
 
         const indexFloat: f32 = @floatFromInt(index);
