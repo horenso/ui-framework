@@ -256,7 +256,6 @@ fn insertNewlineBelow(self: *@This()) !void {
 }
 
 fn deleteOneBackward(self: *@This()) !void {
-    std.log.debug("onBackspace", .{});
     if (self.cursor.col > 0) {
         _ = self.currentLine.data.orderedRemove(self.cursor.col - 1);
         self.setCursorCol(self.cursor.col - 1, true);
@@ -436,6 +435,12 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
             );
             return true;
         },
+        .mouseMotion => |mouseMotionEvent| {
+            if (vec.isVec2fInsideVec4f(.{ 0, 0, self.base.size[0], self.base.size[1] }, mouseMotionEvent.pos)) {
+                self.base.app.setPointer(.text);
+            }
+            return true;
+        },
         else => return false,
     }
 }
@@ -545,8 +550,6 @@ fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
 }
 
 pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
-    // rl.clearBackground(rl.Color.white);
-
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
     self.drawText(renderer);

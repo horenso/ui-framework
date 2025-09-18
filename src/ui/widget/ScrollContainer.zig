@@ -23,19 +23,39 @@ const Scrollbar = struct {
     thumbLength: f32 = 0,
 
     fn isInside(self: *@This(), size: Vec2f, pos: Vec2f) bool {
-        if (self.kind == .x) {
-            return pos[0] >= size[0] - SIZE and
-                pos[0] <= size[0] and
-                pos[1] <= size[1];
-        } else {
-            return pos[1] >= size[1] - SIZE and
-                pos[1] <= size[1] and
-                pos[0] <= size[0];
+        if (!self.visible) {
+            return false;
         }
+        const box: Vec4f = if (self.kind == .x) .{
+            0,
+            size[1] - SIZE,
+            size[0],
+            SIZE,
+        } else .{
+            size[0] - SIZE,
+            0,
+            SIZE,
+            size[1],
+        };
+        return vec.isVec2fInsideVec4f(box, pos);
     }
 
-    fn isInsideThumb(_: *@This(), _: Vec2f, _: Vec2f) bool {
-        return false;
+    fn isInsideThumb(self: *@This(), size: Vec2f, pos: Vec2f) bool {
+        if (!self.visible) {
+            return false;
+        }
+        const thumbBox: Vec4f = if (self.kind == .x) .{
+            size[0] - self.thumbPos - self.thumbLength,
+            size[1] - SIZE,
+            self.thumbLength,
+            SIZE,
+        } else .{
+            size[1] - self.thumbPos - self.thumbLength,
+            size[0] - SIZE,
+            SIZE,
+            self.thumbLength,
+        };
+        return vec.isVec2fInsideVec4f(thumbBox, pos);
     }
 };
 
@@ -72,13 +92,17 @@ pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
 pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     self.base.size = size;
-    self.child.layout(size);
 
     const contentSize = self.child.getMaxContentSize();
     self.setAndClampOffset(self.child.getMaxContentSize(), self.offset);
 
     self.scrollbarX.visible = contentSize[0] > self.base.size[0];
     self.scrollbarY.visible = contentSize[1] > self.base.size[1];
+
+    self.child.layout(.{
+        if (self.scrollbarX.visible) size[0] - Scrollbar.SIZE else size[0],
+        if (self.scrollbarY.visible) size[1] - Scrollbar.SIZE else size[1],
+    });
 
     if (self.scrollbarX.visible) {
         const spaceForOtherScrollbar: f32 = if (self.scrollbarY.visible) Scrollbar.SIZE else 0;
@@ -173,7 +197,7 @@ fn handleOwnEvent(self: *@This(), event: Event) bool {
 
             var newOffset = self.offset;
             if (canScrollX) {
-                newOffset[0] = self.offset[0] - mouseWheelMove[0] * SCROLL_SPEED;
+                newOffset[0] = self.offset[0] + mouseWheelMove[0] * SCROLL_SPEED;
             }
             if (canScrollY) {
                 newOffset[1] = self.offset[1] - mouseWheelMove[1] * SCROLL_SPEED;
@@ -189,6 +213,15 @@ fn handleOwnEvent(self: *@This(), event: Event) bool {
             }
             if (mouseClick.button == .left and self.scrollbarY.isInside(self.base.size, mouseClick.pos)) {
                 std.log.debug("clicked on scrollbarY", .{});
+                return true;
+            }
+            return false;
+        },
+        .mouseMotion => |mouseMotion| {
+            if (self.scrollbarX.isInside(self.base.size, mouseMotion.pos) or
+                self.scrollbarY.isInside(self.base.size, mouseMotion.pos))
+            {
+                self.base.app.setPointer(.default);
                 return true;
             }
             return false;

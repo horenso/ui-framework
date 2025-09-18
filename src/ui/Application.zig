@@ -29,17 +29,32 @@ const InputState = struct {
     rightMouseDown: bool = false,
 };
 
-const SdlState = struct {
-    window: *sdl.SDL_Window,
-    cursor: ?*sdl.SDL_Cursor,
+const Pointer = enum {
+    default,
+    text,
+    move,
 };
 
+const SdlPointers = struct {
+    default: *sdl.SDL_Cursor,
+    text: *sdl.SDL_Cursor,
+    move: *sdl.SDL_Cursor,
+};
+
+const SdlState = struct {
+    window: *sdl.SDL_Window,
+    pointers: SdlPointers,
+};
+
+_sdlState: SdlState,
 _shouldClose: bool = false,
 
 inputState: InputState = .{},
 inputQueue: std.ArrayList(Event) = .empty,
-sdlState: SdlState,
 allocator: std.mem.Allocator,
+
+currentPointer: Pointer = .default,
+nextPointer: Pointer = .default,
 
 fontManager: FontManager,
 renderer: Renderer,
@@ -73,19 +88,20 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
     }
 
     // Set the I-beam cursor
-    const cursor = sdl.SDL_CreateSystemCursor(sdl.SDL_SYSTEM_CURSOR_TEXT);
-    if (cursor != null) {
-        _ = sdl.SDL_SetCursor(cursor);
-    }
+    const pointers: SdlPointers = .{
+        .default = sdl.SDL_CreateSystemCursor(sdl.SDL_SYSTEM_CURSOR_DEFAULT) orelse return error.InitFailure,
+        .text = sdl.SDL_CreateSystemCursor(sdl.SDL_SYSTEM_CURSOR_TEXT) orelse return error.InitFailure,
+        .move = sdl.SDL_CreateSystemCursor(sdl.SDL_SYSTEM_CURSOR_MOVE) orelse return error.InitFailure,
+    };
 
     return .{
         .allocator = allocator,
         .inputQueue = .empty,
         .fontManager = FontManager.init(allocator) catch return error.InitFailure,
         .renderer = Renderer.init(sdlRenderer),
-        .sdlState = .{
+        ._sdlState = .{
             .window = window,
-            .cursor = cursor,
+            .pointers = pointers,
         },
     };
 }
@@ -94,12 +110,12 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.inputQueue.deinit(allocator);
     self.fontManager.deinit(allocator);
 
-    if (self.sdlState.cursor) |cursor| {
-        sdl.SDL_DestroyCursor(cursor);
-    }
+    _ = sdl.SDL_DestroyCursor(self._sdlState.pointers.default);
+    _ = sdl.SDL_DestroyCursor(self._sdlState.pointers.text);
+    _ = sdl.SDL_DestroyCursor(self._sdlState.pointers.move);
 
     self.renderer.deinit();
-    sdl.SDL_DestroyWindow(self.sdlState.window);
+    sdl.SDL_DestroyWindow(self._sdlState.window);
 
     sdl.SDL_Quit();
 }
@@ -107,13 +123,21 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
 pub fn layout(self: *@This(), topWidget: *Widget) void {
     var width: c_int = 0;
     var height: c_int = 0;
-    if (!sdl.SDL_GetWindowSize(self.sdlState.window, &width, &height)) {
-        std.log.debug("Could not get window dimensions!", .{});
+    if (!sdl.SDL_GetWindowSize(self._sdlState.window, &width, &height)) {
+        std.log.warn("Could not get window dimensions!", .{});
     }
     topWidget.layout(.{ @floatFromInt(width), @floatFromInt(height) });
 }
 
 pub fn draw(self: *@This(), topWidget: *Widget) !void {
+    if (self.currentPointer != self.nextPointer) {
+        switch (self.nextPointer) {
+            .default => _ = sdl.SDL_SetCursor(self._sdlState.pointers.default),
+            .text => _ = sdl.SDL_SetCursor(self._sdlState.pointers.text),
+            .move => _ = sdl.SDL_SetCursor(self._sdlState.pointers.move),
+        }
+        self.currentPointer = self.nextPointer;
+    }
     self.renderer.clear(Color.init(255, 255, 255, 255));
     try topWidget.draw(&self.renderer);
     self.renderer.present();
@@ -256,7 +280,20 @@ pub fn pollEvents(self: *@This()) !void {
                     try self.inputQueue.append(self.allocator, .{ .text = .{ .char = codepoint } });
                 }
             },
+            sdl.SDL_EVENT_MOUSE_MOTION => {
+                try self.inputQueue.append(self.allocator, .{ .mouseMotion = .{
+                    .pos = .{ sdlEvent.motion.x, sdlEvent.motion.y },
+                    .delta = .{ sdlEvent.motion.xrel, sdlEvent.motion.yrel },
+                } });
+            },
+            sdl.SDL_EVENT_WINDOW_RESIZED => {
+                try self.inputQueue.append(self.allocator, .resize);
+            },
             else => {},
         }
     }
+}
+
+pub fn setPointer(self: *@This(), pointer: Pointer) void {
+    self.nextPointer = pointer;
 }

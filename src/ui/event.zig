@@ -23,10 +23,10 @@ pub const KeyEventType = enum { down, pressed, up };
 
 pub const KeyEvent = struct {
     code: KeyCode,
+    type: KeyEventType,
     ctrl: bool,
     shift: bool,
     alt: bool,
-    type: KeyEventType,
 };
 
 pub const TextEvent = struct {
@@ -44,9 +44,16 @@ pub const ClickEvent = struct {
     button: ButtonType,
 };
 
+pub const MouseMotionEvent = struct {
+    pos: Vec2f,
+    delta: Vec2f,
+};
+
 pub const Event = union(enum) {
+    resize,
     mouseClick: ClickEvent,
     mouseWheel: Vec2f,
+    mouseMotion: MouseMotionEvent,
     key: KeyEvent,
     text: TextEvent,
 };

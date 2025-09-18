@@ -188,8 +188,8 @@ pub fn drawCharacter(
     };
 
     const dst_rect: sdl.SDL_FRect = .{
-        .x = self.offset[0] + pos[0] + @as(f32, @floatFromInt(glyph.bearing[0])),
-        .y = self.offset[1] + pos[1] + fontAtlas.height - @as(f32, @floatFromInt(glyph.bearing[1])) + fontAtlas.baseline,
+        .x = @round(self.offset[0] + pos[0] + @as(f32, @floatFromInt(glyph.bearing[0]))),
+        .y = @round(self.offset[1] + pos[1] + fontAtlas.height - @as(f32, @floatFromInt(glyph.bearing[1])) + fontAtlas.baseline),
         .w = @floatFromInt(glyph.size[0]),
         .h = @floatFromInt(glyph.size[1]),
     };

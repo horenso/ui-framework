@@ -65,33 +65,44 @@ pub fn main() anyerror!void {
         filePath = firstArg;
     }
 
+    var drawNextFrame = true;
+
     while (!app.shouldClose()) {
-        app.layout(&scrollContainerWidget);
-        try app.draw(&scrollContainerWidget);
         try app.pollEvents();
         while (app.inputQueue.pop()) |event| {
             std.log.debug("Event {any}", .{event});
+
+            drawNextFrame = true;
             switch (event) {
                 .key => |keyEvent| {
                     if (keyEvent.type == .pressed) {
                         if (keyEvent.ctrl and keyEvent.code == .num1) {
                             const newFontSize: i32 = @min(textInput.fontAtlas.fontSize + 4, 52);
                             textInput.setFontSize(&app.fontManager, newFontSize);
+                            drawNextFrame = true;
                         } else if (keyEvent.ctrl and keyEvent.code == .num2) {
                             const newFontSize: i32 = @max(textInput.fontAtlas.fontSize - 4, 12);
                             textInput.setFontSize(&app.fontManager, newFontSize);
+                            drawNextFrame = true;
                         } else if (keyEvent.ctrl and keyEvent.code == .num3) {
                             textInput.showGrid = !textInput.showGrid;
+                            drawNextFrame = true;
                         } else if (keyEvent.ctrl and keyEvent.code == .s) {
                             if (filePath) |path| {
                                 try saveFile(path, &textInput);
                             }
+                            drawNextFrame = true;
                         }
                     }
                 },
                 else => {},
             }
-            _ = try scrollContainerWidget.handleEvent(event);
+            drawNextFrame |= try scrollContainerWidget.handleEvent(event);
+        }
+        if (drawNextFrame) {
+            app.layout(&scrollContainerWidget);
+            try app.draw(&scrollContainerWidget);
+            drawNextFrame = false;
         }
     }
 }
