@@ -58,11 +58,15 @@ pub fn main() anyerror!void {
 
     var filePath: ?[]const u8 = null;
 
-    var argsIt = std.process.args();
-    _ = argsIt.next(); // Skip name of executable
-    if (argsIt.next()) |firstArg| {
-        try loadFile(allocator, firstArg, &textInput);
-        filePath = firstArg;
+    {
+        var argsIt = try std.process.ArgIterator.initWithAllocator(allocator);
+        defer argsIt.deinit();
+
+        _ = argsIt.next(); // Skip name of executable
+        if (argsIt.next()) |firstArg| {
+            try loadFile(allocator, firstArg, &textInput);
+            filePath = firstArg;
+        }
     }
 
     var drawNextFrame = true;

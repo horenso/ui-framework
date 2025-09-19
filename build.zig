@@ -13,13 +13,6 @@ pub fn build(b: *std.Build) void {
     const sdl_dep = b.dependency("sdl", .{
         .target = target,
         .optimize = optimize,
-        .preferred_linkage = .dynamic,
-        // .strip = null,
-        //.sanitize_c = null,
-        //.pic = null,
-        //.lto = null,
-        //.emscripten_pthreads = false,
-        //.install_build_config_h = false,
     });
     const sdl_artifact = sdl_dep.artifact("SDL3");
     exe_mod.linkLibrary(sdl_artifact);
