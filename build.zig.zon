@@ -41,8 +41,8 @@
             .hash = "sdl-0.0.0-i4QD0VJgqACxeT_Me9Va6jRsryIWzzJx2Dj8VwlGY1YG",
         },
         .freetype = .{
-            .url = "git+https://github.com/david-vanderson/freetype#827f12fbf46511c679d722dc55ac123c3c2684fa",
-            .hash = "freetype-2.13.0-alzUkfmNqAAjowVUPRfgA-1i6Rj-bvigTeTytje2oxJt",
+            .url = "git+https://github.com/allyourcodebase/freetype#9d847affbd224cf6a7303ad6d98715e3675ef78c",
+            .hash = "freetype-2.13.3-C3-WdeyJAAD9z8BeYYQ8N3gNlPI9NvHRxg5039S5vhz7",
         },
     },
     .paths = .{

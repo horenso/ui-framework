@@ -64,6 +64,8 @@ const SCROLL_SPEED_VEC: Vec2f = @splat(SCROLL_SPEED);
 const SCROLLBAR_BACKGROUND_COLOR = Color.init(200, 200, 200, 150);
 const SCROLLBAR_FOREGROUND_COLOR = Color.init(60, 60, 60, 128);
 
+outlineColor: Color,
+
 base: Widget.Base,
 child: Widget,
 offset: Vec2f = .{ 0, 0 },
@@ -75,6 +77,7 @@ pub fn init(app: *Application, child: Widget) @This() {
     return .{
         .base = .{ .app = app },
         .child = child,
+        .outlineColor = Color.random(),
     };
 }
 
@@ -88,11 +91,24 @@ pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
     return self.child.getMaxContentSize();
 }
 
+pub fn handleHover(opaquePtr: *anyopaque, pos: Vec2f) void {
+    const self: *@This() = @ptrCast(@alignCast(opaquePtr));
+    if (vec.isVec2fInsideVec4f(.{
+        0,
+        0,
+        self.base.size[0] - if (self.scrollbarY.visible) @as(f32, Scrollbar.SIZE) else 0,
+        self.base.size[1] - if (self.scrollbarX.visible) @as(f32, Scrollbar.SIZE) else 0,
+    }, pos)) {
+        self.child.handleHover(pos);
+    }
+}
+
 pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     self.base.size = size;
 
     const contentSize = self.child.getMaxContentSize();
+
     self.setAndClampOffset(self.child.getMaxContentSize(), self.offset);
 
     self.scrollbarX.visible = contentSize[0] > self.base.size[0];
@@ -126,12 +142,14 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
 pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
-    renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, Color.init(255, 0, 0, 255));
+    renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, self.outlineColor);
 
     {
         const prevOffset = renderer.offset;
         renderer.offset -= self.offset;
         defer renderer.offset = prevOffset;
+
+        renderer.setClip(.{ self.base.size[0], self.base.size[1] });
 
         try self.child.draw(renderer);
     }
@@ -215,15 +233,6 @@ fn handleOwnEvent(self: *@This(), event: Event) bool {
             }
             return false;
         },
-        .mouseMotion => |mouseMotion| {
-            if (self.scrollbarX.isInside(self.base.size, mouseMotion.pos) or
-                self.scrollbarY.isInside(self.base.size, mouseMotion.pos))
-            {
-                self.base.app.setPointer(.default);
-                return true;
-            }
-            return false;
-        },
         else => return false,
     }
 }
@@ -250,6 +259,7 @@ pub fn widget(self: *@This()) Widget {
         .ptr = self,
         .vtable = &.{
             .deinit = deinit,
+            .handleHover = handleHover,
             .layout = layout,
             .draw = draw,
             .handleEvent = handleEvent,

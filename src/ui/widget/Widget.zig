@@ -23,6 +23,7 @@ pub const Base = struct {
 pub const VTable = struct {
     deinit: *const fn (*anyopaque) void,
     layout: *const fn (*anyopaque, size: Vec2f) void,
+    handleHover: *const fn (*anyopaque, pos: Vec2f) void,
     draw: *const fn (*const anyopaque, renderer: *Renderer) anyerror!void,
     /// Returns true if the event was handled, false otherwise.
     handleEvent: *const fn (*anyopaque, event: Event) anyerror!bool,
@@ -43,23 +44,11 @@ pub fn layout(self: @This(), size: Vec2f) void {
     return self.vtable.layout(self.ptr, size);
 }
 
+pub fn handleHover(self: @This(), pos: Vec2f) void {
+    return self.vtable.handleHover(self.ptr, pos);
+}
+
 pub fn draw(self: @This(), renderer: *Renderer) anyerror!void {
-    const size = self.getSize();
-
-    _ = size;
-    // TODO: do clipping
-    // var rect: sdl.SDL_Rect = .{
-    //     .x = 0,
-    //     .y = 0,
-    //     .w = @intFromFloat(size[0]),
-    //     .h = @intFromFloat(size[1]),
-    // };
-
-    // if (sdl.SDL_SetRenderClipRect(@ptrCast(self), &rect) < 0) {
-    //     return error.SDL;
-    // }
-    // defer sdl.SDL_SetRenderClipRect(@ptrCast(self.renderer), null);
-
     try self.vtable.draw(self.ptr, renderer);
 }
 

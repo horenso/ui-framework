@@ -55,6 +55,8 @@ scrollProxy: ScrollProxy,
 
 showGrid: bool = false,
 
+outlineColor: Color,
+
 pub fn init(app: *Application, renderer: Renderer, fontManager: *FontManager) !@This() {
     var lines: std.DoublyLinkedList = .{};
     var emptyLine = try app.allocator.create(LineData);
@@ -76,6 +78,7 @@ pub fn init(app: *Application, renderer: Renderer, fontManager: *FontManager) !@
         .longestLine = emptyLine,
         .cursor = .{ .width = getCursorWidth(fontAtlas.width) },
         .scrollProxy = .{ .scrollContainer = null },
+        .outlineColor = Color.random(),
     };
 }
 
@@ -88,6 +91,7 @@ pub fn widget(self: *@This()) Widget {
         .ptr = self,
         .vtable = &.{
             .deinit = deinit,
+            .handleHover = handleHover,
             .layout = layout,
             .draw = draw,
             .handleEvent = handleEvent,
@@ -269,9 +273,8 @@ fn deleteOneBackward(self: *@This()) !void {
         self.currentLine.data.deinit(self.base.app.allocator);
         self.base.app.allocator.destroy(self.currentLine);
         self.currentLine = line;
-
-        self.findLongestLine();
     }
+    self.findLongestLine();
 }
 
 fn deleteOneForward(self: *@This()) !void {
@@ -429,16 +432,10 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
                 }
             }
             self.setCursor(
-                @min(targetRow, index),
+                @min(targetRow, self.lines.len() - 1),
                 @min(targetCol, self.currentLine.data.items.len),
                 true,
             );
-            return true;
-        },
-        .mouseMotion => |mouseMotionEvent| {
-            if (vec.isVec2fInsideVec4f(.{ 0, 0, self.base.size[0], self.base.size[1] }, mouseMotionEvent.pos)) {
-                self.base.app.setPointer(.text);
-            }
             return true;
         },
         else => return false,
@@ -463,6 +460,12 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     self.base.size = size;
 }
 
+pub fn handleHover(opaquePtr: *anyopaque, pos: Vec2f) void {
+    const self: *@This() = @ptrCast(@alignCast(opaquePtr));
+    _ = pos; // We set the cursor to text in the entire text area.
+    self.base.app.setPointer(.text);
+}
+
 fn getCursorWidth(fontWidth: f32) f32 {
     const scaled: f32 = fontWidth / 8.0;
     return @max(1, @abs(scaled));
@@ -481,12 +484,10 @@ fn drawText(self: *const @This(), renderer: *Renderer) void {
         const x: f32 = 0;
 
         if (index == self.cursor.row) {
-            const maxContentSize = self.getMaxContentSizeInner();
-
             const rect: Vec4f = .{
                 x,
                 y,
-                maxContentSize[0],
+                self.base.size[0],
                 self.fontAtlas.height,
             };
             renderer.fillRect(rect, Color.init(200, 200, 100, 100));
@@ -553,7 +554,7 @@ fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
 pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
-    renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, Color.init(255, 0, 0, 255));
+    renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, self.outlineColor);
 
     self.drawText(renderer);
     if (self.showGrid) {

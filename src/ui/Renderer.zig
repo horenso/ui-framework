@@ -34,6 +34,7 @@ sdlRenderer: *sdl.SDL_Renderer,
 checkerTexture: *sdl.SDL_Texture,
 
 offset: Vec2f = .{ 0, 0 },
+_clip: Vec2f = .{ 0, 0 },
 
 pub fn init(sdlRenderer: *sdl.SDL_Renderer) @This() {
     _ = sdl.SDL_RenderClear(sdlRenderer);
@@ -64,6 +65,18 @@ pub fn init(sdlRenderer: *sdl.SDL_Renderer) @This() {
 
 pub fn deinit(self: @This()) void {
     sdl.SDL_DestroyRenderer(self.sdlRenderer);
+}
+
+pub fn setClip(self: *@This(), clip: Vec2f) void {
+    self._clip = clip;
+    if (!sdl.SDL_SetRenderClipRect(self.sdlRenderer, &.{
+        .x = @intFromFloat(self.offset[0]),
+        .y = @intFromFloat(self.offset[1]),
+        .w = @intFromFloat(self._clip[0]),
+        .h = @intFromFloat(self._clip[1]),
+    })) {
+        std.log.warn("Could not set renderer clip: {s}", .{sdl.SDL_GetError()});
+    }
 }
 
 pub fn clear(self: @This(), color: Color) void {

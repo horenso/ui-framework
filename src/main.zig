@@ -70,6 +70,7 @@ pub fn main() anyerror!void {
     }
 
     var drawNextFrame = true;
+    var frames: u32 = 0;
 
     while (!app.shouldClose()) {
         try app.pollEvents();
@@ -103,7 +104,13 @@ pub fn main() anyerror!void {
             }
             drawNextFrame |= try scrollContainerWidget.handleEvent(event);
         }
+        drawNextFrame |= app.handleHover(&scrollContainerWidget);
         if (drawNextFrame) {
+            frames +%= 1;
+            const title = try std.fmt.allocPrint(allocator, "Frames: {}", .{frames});
+            defer allocator.free(title);
+            app.setWindowTitle(title);
+
             app.layout(&scrollContainerWidget);
             try app.draw(&scrollContainerWidget);
             drawNextFrame = false;

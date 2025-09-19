@@ -24,11 +24,6 @@ const Config = struct {
     title: [:0]const u8,
 };
 
-const InputState = struct {
-    leftMouseDown: bool = false,
-    rightMouseDown: bool = false,
-};
-
 const Pointer = enum {
     default,
     text,
@@ -46,10 +41,13 @@ const SdlState = struct {
     pointers: SdlPointers,
 };
 
+/// For debugging. Draws the widget in the middle of the widget, making the overflow visible.
+const DEBUG_VIRTUAL_WINDOW = true;
+const DEBUG_VIRTUAL_WINDOW_OFFSET = 50;
+
 _sdlState: SdlState,
 _shouldClose: bool = false,
 
-inputState: InputState = .{},
 inputQueue: std.ArrayList(Event) = .empty,
 allocator: std.mem.Allocator,
 
@@ -120,13 +118,58 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     sdl.SDL_Quit();
 }
 
-pub fn layout(self: *@This(), topWidget: *Widget) void {
+pub fn getWindowSize(self: *@This()) Vec2f {
     var width: c_int = 0;
     var height: c_int = 0;
     if (!sdl.SDL_GetWindowSize(self._sdlState.window, &width, &height)) {
         std.log.warn("Could not get window dimensions!", .{});
     }
-    topWidget.layout(.{ @floatFromInt(width), @floatFromInt(height) });
+    return .{ @floatFromInt(width), @floatFromInt(height) };
+}
+
+pub fn setWindowTitle(self: *@This(), title: []const u8) void {
+    if (!sdl.SDL_SetWindowTitle(self._sdlState.window, @ptrCast(title))) {
+        std.log.warn("Could not set window title: {s}", .{sdl.SDL_GetError()});
+    }
+}
+
+pub fn layout(self: *@This(), topWidget: *Widget) void {
+    const size = self.getWindowSize();
+
+    if (DEBUG_VIRTUAL_WINDOW) {
+        topWidget.layout(size - @as(Vec2f, @splat(2 * DEBUG_VIRTUAL_WINDOW_OFFSET)));
+    } else {
+        topWidget.layout(size);
+    }
+}
+
+pub fn handleHover(self: *@This(), topWidget: *Widget) bool {
+    const size = self.getWindowSize();
+
+    var mousePos: Vec2f = undefined;
+    _ = sdl.SDL_GetMouseState(&mousePos[0], &mousePos[1]);
+
+    const windowBounce: Vec4f = if (DEBUG_VIRTUAL_WINDOW) .{
+        DEBUG_VIRTUAL_WINDOW_OFFSET,
+        DEBUG_VIRTUAL_WINDOW_OFFSET,
+        size[0] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+        size[1] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+    } else .{
+        0,
+        0,
+        size[0],
+        size[1],
+    };
+
+    self.setPointer(.default);
+
+    if (vec.isVec2fInsideVec4f(windowBounce, mousePos)) {
+        if (DEBUG_VIRTUAL_WINDOW) {
+            mousePos -= @as(Vec2f, @splat(DEBUG_VIRTUAL_WINDOW_OFFSET));
+        }
+        topWidget.handleHover(mousePos);
+    }
+    return self.currentPointer != self.nextPointer;
 }
 
 pub fn draw(self: *@This(), topWidget: *Widget) !void {
@@ -139,7 +182,15 @@ pub fn draw(self: *@This(), topWidget: *Widget) !void {
         self.currentPointer = self.nextPointer;
     }
     self.renderer.clear(Color.init(255, 255, 255, 255));
-    try topWidget.draw(&self.renderer);
+
+    if (DEBUG_VIRTUAL_WINDOW) {
+        self.renderer.offset += @splat(DEBUG_VIRTUAL_WINDOW_OFFSET);
+        defer self.renderer.offset -= @splat(DEBUG_VIRTUAL_WINDOW_OFFSET);
+        try topWidget.draw(&self.renderer);
+    } else {
+        try topWidget.draw(&self.renderer);
+    }
+
     self.renderer.present();
 }
 
@@ -261,16 +312,26 @@ pub fn pollEvents(self: *@This()) !void {
                     sdl.SDL_BUTTON_RIGHT => .right,
                     else => continue,
                 };
+                var pos: Vec2f = .{
+                    sdlEvent.button.x,
+                    sdlEvent.button.y,
+                };
+                if (DEBUG_VIRTUAL_WINDOW) {
+                    const size = self.getWindowSize();
+                    if (!vec.isVec2fInsideVec4f(.{
+                        DEBUG_VIRTUAL_WINDOW_OFFSET,
+                        DEBUG_VIRTUAL_WINDOW_OFFSET,
+                        size[0] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+                        size[1] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+                    }, pos)) {
+                        return;
+                    }
+                    pos -= @as(Vec2f, @splat(DEBUG_VIRTUAL_WINDOW_OFFSET));
+                }
                 try self.inputQueue.append(self.allocator, .{ .mouseClick = .{
-                    .pos = .{ sdlEvent.button.x, sdlEvent.button.y },
+                    .pos = pos,
                     .button = btn,
                 } });
-                self.inputState.leftMouseDown = (btn == .left);
-            },
-            sdl.SDL_EVENT_MOUSE_BUTTON_UP => {
-                if (sdlEvent.button.button == sdl.SDL_BUTTON_LEFT) {
-                    self.inputState.leftMouseDown = false;
-                }
             },
             sdl.SDL_EVENT_TEXT_INPUT => {
                 const cStringText = sdlEvent.text.text;
@@ -281,8 +342,24 @@ pub fn pollEvents(self: *@This()) !void {
                 }
             },
             sdl.SDL_EVENT_MOUSE_MOTION => {
+                var pos: Vec2f = .{
+                    sdlEvent.motion.x,
+                    sdlEvent.motion.y,
+                };
+                if (DEBUG_VIRTUAL_WINDOW) {
+                    const size = self.getWindowSize();
+                    if (!vec.isVec2fInsideVec4f(.{
+                        DEBUG_VIRTUAL_WINDOW_OFFSET,
+                        DEBUG_VIRTUAL_WINDOW_OFFSET,
+                        size[0] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+                        size[1] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+                    }, pos)) {
+                        return;
+                    }
+                    pos -= @as(Vec2f, @splat(DEBUG_VIRTUAL_WINDOW_OFFSET));
+                }
                 try self.inputQueue.append(self.allocator, .{ .mouseMotion = .{
-                    .pos = .{ sdlEvent.motion.x, sdlEvent.motion.y },
+                    .pos = pos,
                     .delta = .{ sdlEvent.motion.xrel, sdlEvent.motion.yrel },
                 } });
             },
