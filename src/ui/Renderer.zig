@@ -1,59 +1,31 @@
 const std = @import("std");
 const sdl = @import("sdl.zig").sdl;
 
-const vec = @import("vec.zig");
-const Vec2f = vec.Vec2f;
-const Vec4f = vec.Vec4f;
-const Vec2i = vec.Vec2i;
+const vecImport = @import("vec.zig");
+const Vec2f = vecImport.Vec2f;
+const Vec4f = vecImport.Vec4f;
+const Vec2i = vecImport.Vec2i;
 
+const Color = @import("Color.zig");
 const FontAtlas = @import("FontManager.zig").FontAtlas;
 
-pub const Color = struct {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
+fn colorToSdl(color: Color) sdl.SDL_Color {
+    return .{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = color.a,
+    };
+}
 
-    pub fn init(r: u8, g: u8, b: u8, a: u8) @This() {
-        return .{ .r = r, .g = g, .b = b, .a = a };
-    }
-
-    inline fn toSdl(self: @This()) sdl.SDL_Color {
-        return .{ .r = self.r, .g = self.g, .b = self.b, .a = self.a };
-    }
-};
-
-pub const RectI = struct {
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
-
-    inline fn toSdl(self: @This()) sdl.SDL_Rect {
-        return .{
-            .x = @intCast(self.x),
-            .y = @intCast(self.y),
-            .w = @intCast(self.w),
-            .h = @intCast(self.h),
-        };
-    }
-};
-
-pub const RectF = struct {
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-
-    inline fn toSdl(self: @This()) sdl.SDL_Rect {
-        return .{
-            .x = self.x,
-            .y = self.y,
-            .w = self.w,
-            .h = self.h,
-        };
-    }
-};
+fn vec4fToSdlRectF(vec: Vec4f) sdl.SDL_RectF {
+    return .{
+        .x = vec[0],
+        .y = vec[1],
+        .w = vec[2],
+        .h = vec[3],
+    };
+}
 
 pub const Texture = struct { sdlTexture: *sdl.SDL_Texture };
 
@@ -109,7 +81,23 @@ pub fn present(self: @This()) void {
     _ = sdl.SDL_RenderPresent(self.sdlRenderer);
 }
 
-pub fn fillRect(self: @This(), rect: RectF, color: Color) void {
+pub fn outline(self: @This(), rect: Vec4f, color: Color) void {
+    _ = sdl.SDL_SetRenderDrawColor(
+        self.sdlRenderer,
+        color.r,
+        color.g,
+        color.b,
+        color.a,
+    );
+    _ = sdl.SDL_RenderRect(self.sdlRenderer, &.{
+        .x = rect[0] + self.offset[0],
+        .y = rect[1] + self.offset[1],
+        .w = rect[2],
+        .h = rect[3],
+    });
+}
+
+pub fn fillRect(self: @This(), rect: Vec4f, color: Color) void {
     _ = sdl.SDL_SetRenderDrawColor(
         self.sdlRenderer,
         color.r,
@@ -118,24 +106,24 @@ pub fn fillRect(self: @This(), rect: RectF, color: Color) void {
         color.a,
     );
     _ = sdl.SDL_RenderFillRect(self.sdlRenderer, &.{
-        .x = rect.x + self.offset[0],
-        .y = rect.y + self.offset[1],
-        .w = rect.w,
-        .h = rect.h,
+        .x = rect[0] + self.offset[0],
+        .y = rect[1] + self.offset[1],
+        .w = rect[2],
+        .h = rect[3],
     });
 }
 
-pub fn fillRectPattern(self: *@This(), rect: RectF) void {
+pub fn fillRectPattern(self: *@This(), rect: Vec4f) void {
     _ = sdl.SDL_RenderTextureTiled(
         self.sdlRenderer,
         self.checkerTexture,
         null,
         1.0,
         &.{
-            .x = rect.x + self.offset[0],
-            .y = rect.y + self.offset[1],
-            .w = rect.w,
-            .h = rect.h,
+            .x = rect[0] + self.offset[0],
+            .y = rect[1] + self.offset[1],
+            .w = rect[2],
+            .h = rect[3],
         },
     );
 }

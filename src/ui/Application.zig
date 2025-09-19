@@ -3,7 +3,7 @@ const std = @import("std");
 const sdl = @import("./sdl.zig").sdl;
 
 const ButtonType = event.ButtonType;
-const Color = Renderer.Color;
+const Color = @import("Color.zig");
 const event = @import("event.zig");
 const Event = event.Event;
 const FontManager = @import("FontManager.zig");

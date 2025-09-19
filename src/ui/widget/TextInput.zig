@@ -2,12 +2,11 @@ const std = @import("std");
 const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
-const Color = Renderer.Color;
+const Color = @import("../Color.zig");
 const Event = @import("../event.zig").Event;
 const FontAtlas = FontManager.FontAtlas;
 const FontManager = @import("../FontManager.zig");
 const Widget = @import("./Widget.zig");
-const RectF = Renderer.RectF;
 const Renderer = @import("../Renderer.zig");
 const ScrollContainer = @import("./ScrollContainer.zig");
 const ScrollProxy = @import("./ScrollProxy.zig");
@@ -111,6 +110,7 @@ inline fn deinitLines(self: *@This()) void {
 }
 
 fn findLongestLine(self: *@This()) void {
+    self.longestLine = LineData.getFromNode(self.lines.first.?);
     var it = self.lines.first;
     var longest: usize = 0;
     while (it) |currentNode| {
@@ -446,10 +446,11 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
 }
 
 inline fn getMaxContentSizeInner(self: *const @This()) Vec2f {
-    return .{
+    const r = .{
         @as(f32, @floatFromInt(self.longestLine.data.items.len)) * self.fontAtlas.width + getCursorWidth(self.fontAtlas.width),
         @as(f32, @floatFromInt(self.lines.len())) * self.fontAtlas.height,
     };
+    return r;
 }
 
 pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
@@ -482,11 +483,11 @@ fn drawText(self: *const @This(), renderer: *Renderer) void {
         if (index == self.cursor.row) {
             const maxContentSize = self.getMaxContentSizeInner();
 
-            const rect: RectF = .{
-                .x = x,
-                .y = y,
-                .w = maxContentSize[0],
-                .h = self.fontAtlas.height,
+            const rect: Vec4f = .{
+                x,
+                y,
+                maxContentSize[0],
+                self.fontAtlas.height,
             };
             renderer.fillRect(rect, Color.init(200, 200, 100, 100));
         }
@@ -552,16 +553,18 @@ fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
 pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
+    renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, Color.init(255, 0, 0, 255));
+
     self.drawText(renderer);
     if (self.showGrid) {
         self.drawGridLines(renderer);
     }
 
     self.base.app.renderer.fillRect(.{
-        .x = self.cursor.x,
-        .y = self.cursor.y,
-        .w = self.cursor.width,
-        .h = self.fontAtlas.height,
+        self.cursor.x,
+        self.cursor.y,
+        self.cursor.width,
+        self.fontAtlas.height,
     }, CURSOR_COLOR);
 }
 

@@ -3,9 +3,8 @@ const std = @import("std");
 const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
-const Color = Renderer.Color;
+const Color = @import("../Color.zig");
 const Event = @import("../event.zig").Event;
-const RectF = Renderer.RectF;
 const Renderer = @import("../Renderer.zig");
 const Widget = @import("./Widget.zig");
 
@@ -99,10 +98,7 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     self.scrollbarX.visible = contentSize[0] > self.base.size[0];
     self.scrollbarY.visible = contentSize[1] > self.base.size[1];
 
-    self.child.layout(.{
-        if (self.scrollbarX.visible) size[0] - Scrollbar.SIZE else size[0],
-        if (self.scrollbarY.visible) size[1] - Scrollbar.SIZE else size[1],
-    });
+    self.child.layout(contentSize);
 
     if (self.scrollbarX.visible) {
         const spaceForOtherScrollbar: f32 = if (self.scrollbarY.visible) Scrollbar.SIZE else 0;
@@ -130,6 +126,8 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
 pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
+    renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, Color.init(255, 0, 0, 255));
+
     {
         const prevOffset = renderer.offset;
         renderer.offset -= self.offset;
@@ -140,30 +138,30 @@ pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
 
     if (self.scrollbarX.visible) {
         renderer.fillRect(.{
-            .x = 0,
-            .y = self.base.size[1] - Scrollbar.SIZE,
-            .w = self.base.size[0],
-            .h = Scrollbar.SIZE,
+            0,
+            self.base.size[1] - Scrollbar.SIZE,
+            self.base.size[0],
+            Scrollbar.SIZE,
         }, SCROLLBAR_BACKGROUND_COLOR);
         renderer.fillRect(.{
-            .x = self.scrollbarX.thumbPos,
-            .y = self.base.size[1] - Scrollbar.SIZE,
-            .w = self.scrollbarX.thumbLength,
-            .h = Scrollbar.SIZE,
+            self.scrollbarX.thumbPos,
+            self.base.size[1] - Scrollbar.SIZE,
+            self.scrollbarX.thumbLength,
+            Scrollbar.SIZE,
         }, SCROLLBAR_FOREGROUND_COLOR);
     }
     if (self.scrollbarY.visible) {
         renderer.fillRect(.{
-            .x = self.base.size[0] - Scrollbar.SIZE,
-            .y = 0,
-            .w = Scrollbar.SIZE,
-            .h = self.base.size[1],
+            self.base.size[0] - Scrollbar.SIZE,
+            0,
+            Scrollbar.SIZE,
+            self.base.size[1],
         }, SCROLLBAR_BACKGROUND_COLOR);
         renderer.fillRect(.{
-            .x = self.base.size[0] - Scrollbar.SIZE,
-            .y = self.scrollbarY.thumbPos,
-            .w = Scrollbar.SIZE,
-            .h = self.scrollbarY.thumbLength,
+            self.base.size[0] - Scrollbar.SIZE,
+            self.scrollbarY.thumbPos,
+            Scrollbar.SIZE,
+            self.scrollbarY.thumbLength,
         }, SCROLLBAR_FOREGROUND_COLOR);
     }
 }

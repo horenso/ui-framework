@@ -3,6 +3,7 @@ const std = @import("std");
 const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
+const Color = @import("../Color.zig");
 const Event = @import("../event.zig").Event;
 const Renderer = @import("../Renderer.zig");
 
