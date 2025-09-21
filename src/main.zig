@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const sdl = @import("ui/sdl.zig").sdl;
+
 const Application = @import("ui/Application.zig");
 const TextInput = @import("ui/widget/TextInput.zig");
 const Widget = @import("ui/widget/Widget.zig");
@@ -72,7 +74,12 @@ pub fn main() anyerror!void {
     var drawNextFrame = true;
     var frames: u32 = 0;
 
+    const targetFps = 60;
+    const targetFrameMs: u32 = 1000 / targetFps;
+
     while (!app.shouldClose()) {
+        const frameStart = sdl.SDL_GetTicks();
+
         try app.pollEvents();
         while (app.inputQueue.pop()) |event| {
             std.log.debug("Event {any}", .{event});
@@ -114,6 +121,12 @@ pub fn main() anyerror!void {
             app.layout(&scrollContainerWidget);
             try app.draw(&scrollContainerWidget);
             drawNextFrame = false;
+        }
+
+        const frameEnd = sdl.SDL_GetTicks() - frameStart;
+        if (frameEnd < targetFrameMs) {
+            const waitTime = targetFrameMs - frameEnd;
+            sdl.SDL_Delay(@truncate(waitTime));
         }
     }
 }

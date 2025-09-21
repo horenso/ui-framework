@@ -4,4 +4,5 @@ pub const sdl = @cImport({
     @cInclude("SDL3/SDL_revision.h");
     @cDefine("SDL_MAIN_HANDLED", {});
     @cInclude("SDL3/SDL_main.h");
+    @cInclude("SDL3/SDL_timer.h");
 });

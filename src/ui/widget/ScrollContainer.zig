@@ -145,11 +145,11 @@ pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, self.outlineColor);
 
     {
+        renderer.setClip(.{ self.base.size[0], self.base.size[1] });
+
         const prevOffset = renderer.offset;
         renderer.offset -= self.offset;
         defer renderer.offset = prevOffset;
-
-        renderer.setClip(.{ self.base.size[0], self.base.size[1] });
 
         try self.child.draw(renderer);
     }
