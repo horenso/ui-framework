@@ -3,6 +3,8 @@ const std = @import("std");
 const sdl = @import("ui/sdl.zig").sdl;
 
 const Application = @import("ui/Application.zig");
+const Event = @import("ui/event.zig").Event;
+const EventHandler = @import("ui/EventHandler.zig");
 const TextInput = @import("ui/widget/TextInput.zig");
 const Widget = @import("ui/widget/Widget.zig");
 const ScrollContainer = @import("ui/widget/ScrollContainer.zig");
@@ -26,6 +28,51 @@ fn saveFile(path: []const u8, textInput: *TextInput) !void {
 
     std.log.debug("File {s} saved", .{path});
 }
+
+const Context = struct {
+    app: *Application,
+    textInput: *TextInput,
+    scrollContainer: *ScrollContainer,
+    filePath: ?[]const u8,
+
+    pub fn eventHandler(self: *@This()) EventHandler {
+        return .{
+            .ptr = self,
+            ._handler = _handleEvent,
+        };
+    }
+
+    pub fn _handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
+        const self: *@This() = @ptrCast(@alignCast(opaquePtr));
+        // std.log.debug("Event {any}", .{event});
+
+        switch (event) {
+            .key => |keyEvent| {
+                if (keyEvent.type == .pressed) {
+                    if (keyEvent.ctrl and keyEvent.code == .num1) {
+                        const newFontSize: i32 = @min(self.textInput.fontAtlas.fontSize + 4, 52);
+                        self.textInput.setFontSize(&self.app.fontManager, newFontSize);
+                        return true;
+                    } else if (keyEvent.ctrl and keyEvent.code == .num2) {
+                        const newFontSize: i32 = @max(self.textInput.fontAtlas.fontSize - 4, 12);
+                        self.textInput.setFontSize(&self.app.fontManager, newFontSize);
+                        return true;
+                    } else if (keyEvent.ctrl and keyEvent.code == .num3) {
+                        self.textInput.showGrid = !self.textInput.showGrid;
+                        return true;
+                    } else if (keyEvent.ctrl and keyEvent.code == .s) {
+                        if (self.filePath) |path| {
+                            try saveFile(path, self.textInput);
+                            return true;
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+        return false;
+    }
+};
 
 pub fn main() anyerror!void {
     var debugAllocator = std.heap.DebugAllocator(.{
@@ -71,62 +118,14 @@ pub fn main() anyerror!void {
         }
     }
 
-    var drawNextFrame = true;
-    var frames: u32 = 0;
+    var context: Context = .{
+        .app = &app,
+        .filePath = filePath,
+        .scrollContainer = &scrollContainer,
+        .textInput = &textInput,
+    };
 
-    const targetFps = 60;
-    const targetFrameMs: u32 = 1000 / targetFps;
+    app.eventHandler = context.eventHandler();
 
-    while (!app.shouldClose()) {
-        const frameStart = sdl.SDL_GetTicks();
-
-        try app.pollEvents();
-        while (app.inputQueue.pop()) |event| {
-            std.log.debug("Event {any}", .{event});
-
-            drawNextFrame = true;
-            switch (event) {
-                .key => |keyEvent| {
-                    if (keyEvent.type == .pressed) {
-                        if (keyEvent.ctrl and keyEvent.code == .num1) {
-                            const newFontSize: i32 = @min(textInput.fontAtlas.fontSize + 4, 52);
-                            textInput.setFontSize(&app.fontManager, newFontSize);
-                            drawNextFrame = true;
-                        } else if (keyEvent.ctrl and keyEvent.code == .num2) {
-                            const newFontSize: i32 = @max(textInput.fontAtlas.fontSize - 4, 12);
-                            textInput.setFontSize(&app.fontManager, newFontSize);
-                            drawNextFrame = true;
-                        } else if (keyEvent.ctrl and keyEvent.code == .num3) {
-                            textInput.showGrid = !textInput.showGrid;
-                            drawNextFrame = true;
-                        } else if (keyEvent.ctrl and keyEvent.code == .s) {
-                            if (filePath) |path| {
-                                try saveFile(path, &textInput);
-                            }
-                            drawNextFrame = true;
-                        }
-                    }
-                },
-                else => {},
-            }
-            drawNextFrame |= try scrollContainerWidget.handleEvent(event);
-        }
-        drawNextFrame |= app.handleHover(&scrollContainerWidget);
-        if (drawNextFrame) {
-            frames +%= 1;
-            const title = try std.fmt.allocPrint(allocator, "Frames: {}", .{frames});
-            defer allocator.free(title);
-            app.setWindowTitle(title);
-
-            app.layout(&scrollContainerWidget);
-            try app.draw(&scrollContainerWidget);
-            drawNextFrame = false;
-        }
-
-        const frameEnd = sdl.SDL_GetTicks() - frameStart;
-        if (frameEnd < targetFrameMs) {
-            const waitTime = targetFrameMs - frameEnd;
-            sdl.SDL_Delay(@truncate(waitTime));
-        }
-    }
+    try app.startEventLoop(allocator, scrollContainerWidget);
 }

@@ -44,13 +44,13 @@ const Scrollbar = struct {
             return false;
         }
         const thumbBox: Vec4f = if (self.kind == .x) .{
-            size[0] - self.thumbPos - self.thumbLength,
+            self.thumbPos,
             size[1] - SIZE,
             self.thumbLength,
             SIZE,
         } else .{
-            size[1] - self.thumbPos - self.thumbLength,
             size[0] - SIZE,
+            self.thumbPos,
             SIZE,
             self.thumbLength,
         };
@@ -225,10 +225,16 @@ fn handleOwnEvent(self: *@This(), event: Event) bool {
         .mouseClick => |mouseClick| {
             if (mouseClick.button == .left and self.scrollbarX.isInside(self.base.size, mouseClick.pos)) {
                 std.log.debug("clicked on scrollbarX", .{});
+                if (self.scrollbarX.isInsideThumb(self.base.size, mouseClick.pos)) {
+                    std.log.debug("and we're in X thumb", .{});
+                }
                 return true;
             }
             if (mouseClick.button == .left and self.scrollbarY.isInside(self.base.size, mouseClick.pos)) {
                 std.log.debug("clicked on scrollbarY", .{});
+                if (self.scrollbarY.isInsideThumb(self.base.size, mouseClick.pos)) {
+                    std.log.debug("and we're in Y thumb", .{});
+                }
                 return true;
             }
             return false;

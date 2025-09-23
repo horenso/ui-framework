@@ -32,7 +32,7 @@ pub fn goToTop(self: *@This()) void {
     }
 }
 
-pub fn goToBottom(self: *@This(), widget: *Widget, size: Vec2f) void {
+pub fn goToBottom(self: *@This(), widget: Widget, size: Vec2f) void {
     if (self.scrollContainer) |sc| {
         const contentSize = widget.getMaxContentSize();
         const maxScroll = sc.getMaxScroll(size, contentSize);

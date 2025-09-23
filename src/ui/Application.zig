@@ -2,16 +2,17 @@ const std = @import("std");
 
 const sdl = @import("./sdl.zig").sdl;
 
-const ButtonType = event.ButtonType;
+const ButtonType = eventImport.ButtonType;
 const Color = @import("Color.zig");
-const event = @import("event.zig");
-const Event = event.Event;
+const eventImport = @import("event.zig");
+const Event = eventImport.Event;
+const EventHandler = @import("EventHandler.zig");
 const FontManager = @import("FontManager.zig");
-const KeyCode = event.KeyCode;
-const KeyEvent = event.KeyEvent;
-const KeyEventType = event.KeyEventType;
+const KeyCode = eventImport.KeyCode;
+const KeyEvent = eventImport.KeyEvent;
+const KeyEventType = eventImport.KeyEventType;
 const Renderer = @import("Renderer.zig");
-const TextEvent = event.TextEvent;
+const TextEvent = eventImport.TextEvent;
 const Widget = @import("./widget/Widget.zig");
 
 const vec = @import("vec.zig");
@@ -57,6 +58,11 @@ nextPointer: Pointer = .default,
 fontManager: FontManager,
 renderer: Renderer,
 
+/// If present is be called before each event.
+/// If it returns true the function "caught" the event
+/// and it will not be handed to the parent widget
+eventHandler: ?EventHandler = null,
+
 pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFailure}!@This() {
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
         return error.InitFailure;
@@ -66,7 +72,7 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
         config.title,
         config.width,
         config.height,
-        sdl.SDL_WINDOW_OPENGL | sdl.SDL_WINDOW_RESIZABLE,
+        sdl.SDL_WINDOW_VULKAN | sdl.SDL_WINDOW_RESIZABLE,
     ) orelse return error.InitFailure;
 
     _ = sdl.SDL_SetWindowMinimumSize(window, 300, 300);
@@ -121,7 +127,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
 pub fn getWindowSize(self: *@This()) Vec2f {
     var width: c_int = 0;
     var height: c_int = 0;
-    if (!sdl.SDL_GetWindowSize(self._sdlState.window, &width, &height)) {
+    if (!sdl.SDL_GetWindowSizeInPixels(self._sdlState.window, &width, &height)) {
         std.log.warn("Could not get window dimensions!", .{});
     }
     return .{ @floatFromInt(width), @floatFromInt(height) };
@@ -133,7 +139,7 @@ pub fn setWindowTitle(self: *@This(), title: []const u8) void {
     }
 }
 
-pub fn layout(self: *@This(), topWidget: *Widget) void {
+pub fn layout(self: *@This(), topWidget: Widget) void {
     const size = self.getWindowSize();
 
     if (DEBUG_VIRTUAL_WINDOW) {
@@ -143,7 +149,7 @@ pub fn layout(self: *@This(), topWidget: *Widget) void {
     }
 }
 
-pub fn handleHover(self: *@This(), topWidget: *Widget) bool {
+pub fn handleHover(self: *@This(), topWidget: Widget) bool {
     const size = self.getWindowSize();
 
     var mousePos: Vec2f = undefined;
@@ -172,7 +178,7 @@ pub fn handleHover(self: *@This(), topWidget: *Widget) bool {
     return self.currentPointer != self.nextPointer;
 }
 
-pub fn draw(self: *@This(), topWidget: *Widget) !void {
+pub fn draw(self: *@This(), topWidget: Widget) !void {
     if (self.currentPointer != self.nextPointer) {
         switch (self.nextPointer) {
             .default => _ = sdl.SDL_SetCursor(self._sdlState.pointers.default),
@@ -306,7 +312,7 @@ pub fn pollEvents(self: *@This()) !void {
                 });
             },
             sdl.SDL_EVENT_MOUSE_BUTTON_DOWN => {
-                const btn: event.ButtonType = switch (sdlEvent.button.button) {
+                const btn: eventImport.ButtonType = switch (sdlEvent.button.button) {
                     sdl.SDL_BUTTON_LEFT => .left,
                     sdl.SDL_BUTTON_MIDDLE => .middle,
                     sdl.SDL_BUTTON_RIGHT => .right,
@@ -363,7 +369,8 @@ pub fn pollEvents(self: *@This()) !void {
                     .delta = .{ sdlEvent.motion.xrel, sdlEvent.motion.yrel },
                 } });
             },
-            sdl.SDL_EVENT_WINDOW_RESIZED => {
+            sdl.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
+                std.log.debug("resize: {any}", .{sdlEvent.window});
                 try self.inputQueue.append(self.allocator, .resize);
             },
             else => {},
@@ -373,4 +380,57 @@ pub fn pollEvents(self: *@This()) !void {
 
 pub fn setPointer(self: *@This(), pointer: Pointer) void {
     self.nextPointer = pointer;
+}
+
+pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget: Widget) !void {
+    var frames: u64 = 0;
+
+    const targetFps = 60;
+    const targetFrameMs: u32 = 1000 / targetFps;
+
+    var redraws: enum { skip, redraw, redrawTwoFrames } = .redraw;
+
+    while (!self.shouldClose()) {
+        const frameStart = sdl.SDL_GetTicks();
+
+        try self.pollEvents();
+        while (self.inputQueue.pop()) |event| {
+            if (event == .resize) {
+                redraws = .redrawTwoFrames;
+                continue;
+            }
+
+            if (self.eventHandler) |handler| {
+                if (try handler.handleEvent(event)) {
+                    redraws = .redraw;
+                    continue;
+                }
+            }
+            if (try parentWidget.handleEvent(event)) {
+                redraws = .redraw;
+                continue;
+            }
+        }
+
+        if (self.handleHover(parentWidget) and redraws != .redrawTwoFrames) {
+            redraws = .redraw;
+        }
+
+        while (redraws != .skip) {
+            frames +%= 1;
+            const title = try std.fmt.allocPrint(allocator, "Frames: {}", .{frames});
+            defer allocator.free(title);
+            self.setWindowTitle(title);
+
+            self.layout(parentWidget);
+            try self.draw(parentWidget);
+            redraws = if (redraws == .redrawTwoFrames) .redraw else .skip;
+        }
+
+        const frameEnd = sdl.SDL_GetTicks() - frameStart;
+        if (frameEnd < targetFrameMs) {
+            const waitTime = targetFrameMs - frameEnd;
+            sdl.SDL_Delay(@truncate(waitTime));
+        }
+    }
 }
