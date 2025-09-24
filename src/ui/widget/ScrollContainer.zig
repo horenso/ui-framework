@@ -31,13 +31,13 @@ const Scrollbar = struct {
         const box: Vec4f = if (self.kind == .x) .{
             0,
             size[1] - SIZE,
-            size[0],
+            self.length,
             SIZE,
         } else .{
             size[0] - SIZE,
             0,
             SIZE,
-            size[1],
+            self.length,
         };
         return vec.isVec2fInsideVec4f(box, pos);
     }
@@ -246,6 +246,18 @@ fn handleOwnEvent(self: *@This(), event: Event) bool {
                     return true;
                 }
                 return false;
+            }
+            if (self.scrollbarX.visible and
+                self.scrollbarY.visible and
+                vec.isVec2fInsideVec4f(.{
+                    self.base.size[0] - Scrollbar.SIZE,
+                    self.base.size[1] - Scrollbar.SIZE,
+                    Scrollbar.SIZE,
+                    Scrollbar.SIZE,
+                }, mouseButton.pos))
+            {
+                // square were both scrollbars meet
+                return true;
             }
             if (mouseButton.button == .left and self.scrollbarX.isInside(self.base.size, mouseButton.pos)) {
                 const contentSize = self.child.getMaxContentSize();
