@@ -21,7 +21,10 @@ const Scrollbar = struct {
     thumbPos: f32 = 0,
     thumbLength: f32 = 0,
 
-    fn isInside(self: *@This(), size: Vec2f, pos: Vec2f) bool {
+    dragging: bool = false,
+    dragOffset: f32 = 0,
+
+    fn isInside(self: *const @This(), size: Vec2f, pos: Vec2f) bool {
         if (!self.visible) {
             return false;
         }
@@ -39,7 +42,7 @@ const Scrollbar = struct {
         return vec.isVec2fInsideVec4f(box, pos);
     }
 
-    fn isInsideThumb(self: *@This(), size: Vec2f, pos: Vec2f) bool {
+    fn isInsideThumb(self: *const @This(), size: Vec2f, pos: Vec2f) bool {
         if (!self.visible) {
             return false;
         }
@@ -56,13 +59,19 @@ const Scrollbar = struct {
         };
         return vec.isVec2fInsideVec4f(thumbBox, pos);
     }
+
+    fn getScrolledPercentage(self: *const @This()) f32 {
+        return self.thumbPos / (self.length - self.thumbLength);
+    }
 };
 
 const SCROLL_SPEED = 40.0;
 const SCROLL_SPEED_VEC: Vec2f = @splat(SCROLL_SPEED);
 
 const SCROLLBAR_BACKGROUND_COLOR = Color.init(200, 200, 200, 150);
-const SCROLLBAR_FOREGROUND_COLOR = Color.init(60, 60, 60, 128);
+const SCROLLBAR_THUMB_COLOR = Color.init(60, 60, 60, 128);
+const SCROLLBAR_THUMB_HOVERING_COLOR = Color.init(60, 60, 60, 200);
+const SCROLLBAR_THUMB_DRAGGING_COLOR = Color.init(60, 60, 200, 200);
 
 outlineColor: Color,
 
@@ -109,7 +118,7 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
 
     const contentSize = self.child.getMaxContentSize();
 
-    self.setAndClampOffset(self.child.getMaxContentSize(), self.offset);
+    self.setAndClampOffset(contentSize, self.offset);
 
     self.scrollbarX.visible = contentSize[0] > self.base.size[0];
     self.scrollbarY.visible = contentSize[1] > self.base.size[1];
@@ -166,7 +175,7 @@ pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
             self.base.size[1] - Scrollbar.SIZE,
             self.scrollbarX.thumbLength,
             Scrollbar.SIZE,
-        }, SCROLLBAR_FOREGROUND_COLOR);
+        }, SCROLLBAR_THUMB_COLOR);
     }
     if (self.scrollbarY.visible) {
         renderer.fillRect(.{
@@ -180,7 +189,7 @@ pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
             self.scrollbarY.thumbPos,
             Scrollbar.SIZE,
             self.scrollbarY.thumbLength,
-        }, SCROLLBAR_FOREGROUND_COLOR);
+        }, SCROLLBAR_THUMB_COLOR);
     }
 }
 
@@ -193,6 +202,13 @@ pub fn getMaxScroll(self: *@This(), size: Vec2f, contentSize: Vec2f) Vec2f {
         @max(0, upperUnbound[0]),
         @max(0, upperUnbound[1]),
     };
+}
+
+fn setOffsetFromPercentage(self: *@This(), contentSize: Vec2f, pos: Vec2f) void {
+    const maxScroll = self.getMaxScroll(self.base.size, contentSize);
+
+    const newOffset = maxScroll * pos;
+    self.setAndClampOffset(contentSize, newOffset);
 }
 
 fn setAndClampOffset(self: *@This(), contentSize: Vec2f, newOffset: Vec2f) void {
@@ -222,25 +238,123 @@ fn handleOwnEvent(self: *@This(), event: Event) bool {
 
             return canScrollX or canScrollY;
         },
-        .mouseClick => |mouseClick| {
-            if (mouseClick.button == .left and self.scrollbarX.isInside(self.base.size, mouseClick.pos)) {
-                std.log.debug("clicked on scrollbarX", .{});
-                if (self.scrollbarX.isInsideThumb(self.base.size, mouseClick.pos)) {
-                    std.log.debug("and we're in X thumb", .{});
+        .mouseButton => |mouseButton| {
+            if (mouseButton.type == .up) {
+                if (mouseButton.button == .left) {
+                    self.scrollbarX.dragging = false;
+                    self.scrollbarY.dragging = false;
+                    return true;
+                }
+                return false;
+            }
+            if (mouseButton.button == .left and self.scrollbarX.isInside(self.base.size, mouseButton.pos)) {
+                const contentSize = self.child.getMaxContentSize();
+
+                if (!self.scrollbarX.isInsideThumb(self.base.size, mouseButton.pos)) {
+                    // Jump: center the thumb on the click
+                    const clickX = mouseButton.pos[0];
+
+                    const spaceForOtherScrollbar: f32 = if (self.scrollbarY.visible) Scrollbar.SIZE else 0;
+                    const trackLength = self.base.size[0] - spaceForOtherScrollbar;
+
+                    const maxOffset = contentSize[0] - trackLength;
+                    if (maxOffset > 0) {
+                        // compute target offset from click
+                        const newThumbPos = std.math.clamp(
+                            clickX - self.scrollbarX.thumbLength / 2,
+                            0,
+                            trackLength - self.scrollbarX.thumbLength,
+                        );
+
+                        const scrolled = newThumbPos / (trackLength - self.scrollbarX.thumbLength);
+                        const newOffset = scrolled * maxOffset;
+
+                        self.setAndClampOffset(contentSize, .{ newOffset, self.offset[1] });
+                        self.scrollbarX.dragOffset = mouseButton.pos[0] - newThumbPos;
+                    }
+                } else {
+                    self.scrollbarX.dragOffset = mouseButton.pos[0] - self.scrollbarX.thumbPos;
+                }
+                self.scrollbarX.dragging = true;
+                return true;
+            }
+            if (mouseButton.button == .left and self.scrollbarY.isInside(self.base.size, mouseButton.pos)) {
+                const contentSize = self.child.getMaxContentSize();
+
+                if (!self.scrollbarY.isInsideThumb(self.base.size, mouseButton.pos)) {
+                    const clickY = mouseButton.pos[1];
+
+                    const spaceForOtherScrollbar: f32 = if (self.scrollbarX.visible) Scrollbar.SIZE else 0;
+                    const trackLength = self.base.size[1] - spaceForOtherScrollbar;
+
+                    const maxOffset = contentSize[1] - trackLength;
+                    if (maxOffset > 0) {
+                        const newThumbPos = std.math.clamp(
+                            clickY - self.scrollbarY.thumbLength / 2,
+                            0,
+                            trackLength - self.scrollbarY.thumbLength,
+                        );
+
+                        const scrolled = newThumbPos / (trackLength - self.scrollbarY.thumbLength);
+                        const newOffset = scrolled * maxOffset;
+
+                        self.setAndClampOffset(contentSize, .{ self.offset[0], newOffset });
+                        self.scrollbarX.dragOffset = mouseButton.pos[1] - newThumbPos;
+                    }
+                } else {
+                    self.scrollbarY.dragOffset = mouseButton.pos[1] - self.scrollbarY.thumbPos;
+                }
+                self.scrollbarY.dragging = true;
+                return true;
+            }
+            return false;
+        },
+        .mouseMotion => |mouseMotion| {
+            const contentSize = self.child.getMaxContentSize();
+
+            if (!mouseMotion.buttons.left) {
+                self.scrollbarX.dragging = false;
+                self.scrollbarY.dragging = false;
+            }
+
+            if (self.scrollbarX.dragging) {
+                const spaceForOtherScrollbar: f32 = if (self.scrollbarY.visible) Scrollbar.SIZE else 0;
+                const trackLength = self.base.size[0] - spaceForOtherScrollbar;
+                const maxOffset = contentSize[0] - trackLength;
+                if (maxOffset > 0) {
+                    const newThumbPos = std.math.clamp(
+                        mouseMotion.pos[0] - self.scrollbarX.dragOffset,
+                        0,
+                        trackLength - self.scrollbarX.thumbLength,
+                    );
+                    const scrolled = newThumbPos / (trackLength - self.scrollbarX.thumbLength);
+                    const newOffset = scrolled * maxOffset;
+                    self.setAndClampOffset(contentSize, .{ newOffset, self.offset[1] });
                 }
                 return true;
             }
-            if (mouseClick.button == .left and self.scrollbarY.isInside(self.base.size, mouseClick.pos)) {
-                std.log.debug("clicked on scrollbarY", .{});
-                if (self.scrollbarY.isInsideThumb(self.base.size, mouseClick.pos)) {
-                    std.log.debug("and we're in Y thumb", .{});
+
+            if (self.scrollbarY.dragging) {
+                const spaceForOtherScrollbar: f32 = if (self.scrollbarX.visible) Scrollbar.SIZE else 0;
+                const trackLength = self.base.size[1] - spaceForOtherScrollbar;
+                const maxOffset = contentSize[1] - trackLength;
+                if (maxOffset > 0) {
+                    const newThumbPos = std.math.clamp(
+                        mouseMotion.pos[1] - self.scrollbarY.dragOffset,
+                        0,
+                        trackLength - self.scrollbarY.thumbLength,
+                    );
+                    const scrolled = newThumbPos / (trackLength - self.scrollbarY.thumbLength);
+                    const newOffset = scrolled * maxOffset;
+                    self.setAndClampOffset(contentSize, .{ self.offset[0], newOffset });
                 }
                 return true;
             }
             return false;
         },
-        else => return false,
+        else => {},
     }
+    return false;
 }
 
 pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
@@ -250,9 +364,9 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
         return true;
     }
 
-    const e = if (event == .mouseClick) blk: {
+    const e = if (event == .mouseButton) blk: {
         var newClickEvent = event;
-        newClickEvent.mouseClick.pos += self.offset;
+        newClickEvent.mouseButton.pos += self.offset;
         break :blk newClickEvent;
     } else event;
     const childHandledEvent = try self.child.handleEvent(e);

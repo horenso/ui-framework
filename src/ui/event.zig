@@ -33,25 +33,36 @@ pub const TextEvent = struct {
     char: u32,
 };
 
-pub const ButtonType = enum {
+pub const MouseButton = enum {
     left,
     middle,
     right,
 };
 
-pub const ClickEvent = struct {
+pub const MouseButtonEventType = enum {
+    down,
+    up,
+};
+
+pub const MouseButtonEvent = struct {
     pos: Vec2f,
-    button: ButtonType,
+    button: MouseButton,
+    type: MouseButtonEventType,
 };
 
 pub const MouseMotionEvent = struct {
     pos: Vec2f,
     delta: Vec2f,
+    buttons: struct {
+        left: bool,
+        middle: bool,
+        right: bool,
+    },
 };
 
 pub const Event = union(enum) {
     resize,
-    mouseClick: ClickEvent,
+    mouseButton: MouseButtonEvent,
     mouseWheel: Vec2f,
     mouseMotion: MouseMotionEvent,
     key: KeyEvent,

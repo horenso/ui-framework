@@ -2,7 +2,7 @@ const std = @import("std");
 
 const sdl = @import("./sdl.zig").sdl;
 
-const ButtonType = eventImport.ButtonType;
+const ButtonType = eventImport.MouseButton;
 const Color = @import("Color.zig");
 const eventImport = @import("event.zig");
 const Event = eventImport.Event;
@@ -43,8 +43,9 @@ const SdlState = struct {
 };
 
 /// For debugging. Draws the widget in the middle of the widget, making the overflow visible.
-const DEBUG_VIRTUAL_WINDOW = true;
+const DEBUG_VIRTUAL_WINDOW = false;
 const DEBUG_VIRTUAL_WINDOW_OFFSET = 50;
+const DEBUG_LOG_EVENTS = false;
 
 _sdlState: SdlState,
 _shouldClose: bool = false,
@@ -311,8 +312,8 @@ pub fn pollEvents(self: *@This()) !void {
                     },
                 });
             },
-            sdl.SDL_EVENT_MOUSE_BUTTON_DOWN => {
-                const btn: eventImport.ButtonType = switch (sdlEvent.button.button) {
+            sdl.SDL_EVENT_MOUSE_BUTTON_DOWN, sdl.SDL_EVENT_MOUSE_BUTTON_UP => {
+                const btn: eventImport.MouseButton = switch (sdlEvent.button.button) {
                     sdl.SDL_BUTTON_LEFT => .left,
                     sdl.SDL_BUTTON_MIDDLE => .middle,
                     sdl.SDL_BUTTON_RIGHT => .right,
@@ -334,9 +335,10 @@ pub fn pollEvents(self: *@This()) !void {
                     }
                     pos -= @as(Vec2f, @splat(DEBUG_VIRTUAL_WINDOW_OFFSET));
                 }
-                try self.inputQueue.append(self.allocator, .{ .mouseClick = .{
+                try self.inputQueue.append(self.allocator, .{ .mouseButton = .{
                     .pos = pos,
                     .button = btn,
+                    .type = if (sdlEvent.type == sdl.SDL_EVENT_MOUSE_BUTTON_DOWN) .down else .up,
                 } });
             },
             sdl.SDL_EVENT_TEXT_INPUT => {
@@ -367,10 +369,14 @@ pub fn pollEvents(self: *@This()) !void {
                 try self.inputQueue.append(self.allocator, .{ .mouseMotion = .{
                     .pos = pos,
                     .delta = .{ sdlEvent.motion.xrel, sdlEvent.motion.yrel },
+                    .buttons = .{
+                        .left = sdlEvent.motion.state & sdl.SDL_BUTTON_LMASK != 0,
+                        .middle = sdlEvent.motion.state & sdl.SDL_BUTTON_MMASK != 0,
+                        .right = sdlEvent.motion.state & sdl.SDL_BUTTON_RMASK != 0,
+                    },
                 } });
             },
             sdl.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
-                std.log.debug("resize: {any}", .{sdlEvent.window});
                 try self.inputQueue.append(self.allocator, .resize);
             },
             else => {},
@@ -395,6 +401,10 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
 
         try self.pollEvents();
         while (self.inputQueue.pop()) |event| {
+            if (DEBUG_LOG_EVENTS) {
+                std.log.debug("Event {any}", .{event});
+            }
+
             if (event == .resize) {
                 redraws = .redrawTwoFrames;
                 continue;

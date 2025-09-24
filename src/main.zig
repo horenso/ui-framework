@@ -44,8 +44,6 @@ const Context = struct {
 
     pub fn _handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
         const self: *@This() = @ptrCast(@alignCast(opaquePtr));
-        // std.log.debug("Event {any}", .{event});
-
         switch (event) {
             .key => |keyEvent| {
                 if (keyEvent.type == .pressed) {

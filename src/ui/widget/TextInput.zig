@@ -414,7 +414,7 @@ pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
 
             return true;
         },
-        .mouseClick => |clickEvent| {
+        .mouseButton => |clickEvent| {
             // This is the cell the user clicked on, now we need to figure out if it's within the text
             const targetRow: usize = @intFromFloat(clickEvent.pos[1] / self.fontAtlas.height);
             const targetCol: usize = @intFromFloat(@round(clickEvent.pos[0] / self.fontAtlas.width));
