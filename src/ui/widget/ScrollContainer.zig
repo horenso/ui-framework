@@ -102,6 +102,9 @@ pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
 
 pub fn handleHover(opaquePtr: *anyopaque, pos: Vec2f) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
+    if (self.scrollbarX.dragging or self.scrollbarY.dragging) {
+        return;
+    }
     if (vec.isVec2fInsideVec4f(.{
         0,
         0,
@@ -170,12 +173,15 @@ pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
             self.base.size[0],
             Scrollbar.SIZE,
         }, SCROLLBAR_BACKGROUND_COLOR);
-        renderer.fillRect(.{
-            self.scrollbarX.thumbPos,
-            self.base.size[1] - Scrollbar.SIZE,
-            self.scrollbarX.thumbLength,
-            Scrollbar.SIZE,
-        }, SCROLLBAR_THUMB_COLOR);
+        renderer.fillRect(
+            .{
+                self.scrollbarX.thumbPos,
+                self.base.size[1] - Scrollbar.SIZE,
+                self.scrollbarX.thumbLength,
+                Scrollbar.SIZE,
+            },
+            if (self.scrollbarX.dragging) SCROLLBAR_THUMB_DRAGGING_COLOR else SCROLLBAR_THUMB_COLOR,
+        );
     }
     if (self.scrollbarY.visible) {
         renderer.fillRect(.{
@@ -184,12 +190,15 @@ pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
             Scrollbar.SIZE,
             self.base.size[1],
         }, SCROLLBAR_BACKGROUND_COLOR);
-        renderer.fillRect(.{
-            self.base.size[0] - Scrollbar.SIZE,
-            self.scrollbarY.thumbPos,
-            Scrollbar.SIZE,
-            self.scrollbarY.thumbLength,
-        }, SCROLLBAR_THUMB_COLOR);
+        renderer.fillRect(
+            .{
+                self.base.size[0] - Scrollbar.SIZE,
+                self.scrollbarY.thumbPos,
+                Scrollbar.SIZE,
+                self.scrollbarY.thumbLength,
+            },
+            if (self.scrollbarY.dragging) SCROLLBAR_THUMB_DRAGGING_COLOR else SCROLLBAR_THUMB_COLOR,
+        );
     }
 }
 

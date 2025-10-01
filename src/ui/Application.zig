@@ -50,7 +50,7 @@ const DEBUG_LOG_EVENTS = false;
 _sdlState: SdlState,
 _shouldClose: bool = false,
 
-inputQueue: std.ArrayList(Event) = .empty,
+inputQueue: std.ArrayListUnmanaged(Event),
 allocator: std.mem.Allocator,
 
 currentPointer: Pointer = .default,
@@ -64,7 +64,7 @@ renderer: Renderer,
 /// and it will not be handed to the parent widget
 eventHandler: ?EventHandler = null,
 
-pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFailure}!@This() {
+pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{ OutOfMemory, InitFailure }!@This() {
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
         return error.InitFailure;
     }
@@ -101,7 +101,7 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{InitFai
 
     return .{
         .allocator = allocator,
-        .inputQueue = .empty,
+        .inputQueue = try .initCapacity(allocator, 3),
         .fontManager = FontManager.init(allocator) catch return error.InitFailure,
         .renderer = Renderer.init(sdlRenderer),
         ._sdlState = .{
@@ -290,97 +290,106 @@ fn handleKeyEvent(self: *@This(), sdlScancode: sdl.SDL_Scancode, sdlEventType: u
     }
 }
 
-pub fn pollEvents(self: *@This()) !void {
+inline fn populateInputQueue(self: *@This(), sdlEvent: sdl.SDL_Event) !void {
+    switch (sdlEvent.type) {
+        sdl.SDL_EVENT_QUIT => {
+            self._shouldClose = true;
+        },
+        sdl.SDL_EVENT_KEY_DOWN, sdl.SDL_EVENT_KEY_UP => {
+            try self.handleKeyEvent(
+                sdlEvent.key.scancode,
+                sdlEvent.type,
+                sdlEvent.key.mod,
+            );
+        },
+        sdl.SDL_EVENT_MOUSE_WHEEL => {
+            try self.inputQueue.append(self.allocator, .{
+                .mouseWheel = .{
+                    sdlEvent.wheel.x,
+                    sdlEvent.wheel.y,
+                },
+            });
+        },
+        sdl.SDL_EVENT_MOUSE_BUTTON_DOWN, sdl.SDL_EVENT_MOUSE_BUTTON_UP => {
+            const btn: eventImport.MouseButton = switch (sdlEvent.button.button) {
+                sdl.SDL_BUTTON_LEFT => .left,
+                sdl.SDL_BUTTON_MIDDLE => .middle,
+                sdl.SDL_BUTTON_RIGHT => .right,
+                else => return,
+            };
+            var pos: Vec2f = .{
+                sdlEvent.button.x,
+                sdlEvent.button.y,
+            };
+            if (DEBUG_VIRTUAL_WINDOW) {
+                const size = self.getWindowSize();
+                if (!vec.isVec2fInsideVec4f(.{
+                    DEBUG_VIRTUAL_WINDOW_OFFSET,
+                    DEBUG_VIRTUAL_WINDOW_OFFSET,
+                    size[0] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+                    size[1] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+                }, pos)) {
+                    return;
+                }
+                pos -= @as(Vec2f, @splat(DEBUG_VIRTUAL_WINDOW_OFFSET));
+            }
+            try self.inputQueue.append(self.allocator, .{ .mouseButton = .{
+                .pos = pos,
+                .button = btn,
+                .type = if (sdlEvent.type == sdl.SDL_EVENT_MOUSE_BUTTON_DOWN) .down else .up,
+            } });
+        },
+        sdl.SDL_EVENT_TEXT_INPUT => {
+            const cStringText = sdlEvent.text.text;
+            const utf8Viewer = try std.unicode.Utf8View.init(cStringText[0..std.mem.len(cStringText)]);
+            var it = utf8Viewer.iterator();
+            while (it.nextCodepoint()) |codepoint| {
+                try self.inputQueue.append(self.allocator, .{ .text = .{ .char = codepoint } });
+            }
+        },
+        sdl.SDL_EVENT_MOUSE_MOTION => {
+            var pos: Vec2f = .{
+                sdlEvent.motion.x,
+                sdlEvent.motion.y,
+            };
+            if (DEBUG_VIRTUAL_WINDOW) {
+                const size = self.getWindowSize();
+                if (!vec.isVec2fInsideVec4f(.{
+                    DEBUG_VIRTUAL_WINDOW_OFFSET,
+                    DEBUG_VIRTUAL_WINDOW_OFFSET,
+                    size[0] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+                    size[1] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
+                }, pos)) {
+                    return;
+                }
+                pos -= @as(Vec2f, @splat(DEBUG_VIRTUAL_WINDOW_OFFSET));
+            }
+            try self.inputQueue.append(self.allocator, .{ .mouseMotion = .{
+                .pos = pos,
+                .delta = .{ sdlEvent.motion.xrel, sdlEvent.motion.yrel },
+                .buttons = .{
+                    .left = sdlEvent.motion.state & sdl.SDL_BUTTON_LMASK != 0,
+                    .middle = sdlEvent.motion.state & sdl.SDL_BUTTON_MMASK != 0,
+                    .right = sdlEvent.motion.state & sdl.SDL_BUTTON_RMASK != 0,
+                },
+            } });
+        },
+        sdl.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
+            try self.inputQueue.append(self.allocator, .resize);
+        },
+        else => {},
+    }
+}
+
+pub fn waitEvents(self: *@This()) !void {
     var sdlEvent: sdl.SDL_Event = undefined;
+    if (!sdl.SDL_WaitEvent(&sdlEvent)) {
+        std.log.warn("SDL_WaitEvent returned false {s}", .{sdl.SDL_GetError()});
+        return;
+    }
+    try populateInputQueue(self, sdlEvent);
     while (sdl.SDL_PollEvent(&sdlEvent)) {
-        switch (sdlEvent.type) {
-            sdl.SDL_EVENT_QUIT => {
-                self._shouldClose = true;
-            },
-            sdl.SDL_EVENT_KEY_DOWN, sdl.SDL_EVENT_KEY_UP => {
-                try self.handleKeyEvent(
-                    sdlEvent.key.scancode,
-                    sdlEvent.type,
-                    sdlEvent.key.mod,
-                );
-            },
-            sdl.SDL_EVENT_MOUSE_WHEEL => {
-                try self.inputQueue.append(self.allocator, .{
-                    .mouseWheel = .{
-                        sdlEvent.wheel.x,
-                        sdlEvent.wheel.y,
-                    },
-                });
-            },
-            sdl.SDL_EVENT_MOUSE_BUTTON_DOWN, sdl.SDL_EVENT_MOUSE_BUTTON_UP => {
-                const btn: eventImport.MouseButton = switch (sdlEvent.button.button) {
-                    sdl.SDL_BUTTON_LEFT => .left,
-                    sdl.SDL_BUTTON_MIDDLE => .middle,
-                    sdl.SDL_BUTTON_RIGHT => .right,
-                    else => continue,
-                };
-                var pos: Vec2f = .{
-                    sdlEvent.button.x,
-                    sdlEvent.button.y,
-                };
-                if (DEBUG_VIRTUAL_WINDOW) {
-                    const size = self.getWindowSize();
-                    if (!vec.isVec2fInsideVec4f(.{
-                        DEBUG_VIRTUAL_WINDOW_OFFSET,
-                        DEBUG_VIRTUAL_WINDOW_OFFSET,
-                        size[0] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
-                        size[1] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
-                    }, pos)) {
-                        return;
-                    }
-                    pos -= @as(Vec2f, @splat(DEBUG_VIRTUAL_WINDOW_OFFSET));
-                }
-                try self.inputQueue.append(self.allocator, .{ .mouseButton = .{
-                    .pos = pos,
-                    .button = btn,
-                    .type = if (sdlEvent.type == sdl.SDL_EVENT_MOUSE_BUTTON_DOWN) .down else .up,
-                } });
-            },
-            sdl.SDL_EVENT_TEXT_INPUT => {
-                const cStringText = sdlEvent.text.text;
-                const utf8Viewer = try std.unicode.Utf8View.init(cStringText[0..std.mem.len(cStringText)]);
-                var it = utf8Viewer.iterator();
-                while (it.nextCodepoint()) |codepoint| {
-                    try self.inputQueue.append(self.allocator, .{ .text = .{ .char = codepoint } });
-                }
-            },
-            sdl.SDL_EVENT_MOUSE_MOTION => {
-                var pos: Vec2f = .{
-                    sdlEvent.motion.x,
-                    sdlEvent.motion.y,
-                };
-                if (DEBUG_VIRTUAL_WINDOW) {
-                    const size = self.getWindowSize();
-                    if (!vec.isVec2fInsideVec4f(.{
-                        DEBUG_VIRTUAL_WINDOW_OFFSET,
-                        DEBUG_VIRTUAL_WINDOW_OFFSET,
-                        size[0] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
-                        size[1] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
-                    }, pos)) {
-                        return;
-                    }
-                    pos -= @as(Vec2f, @splat(DEBUG_VIRTUAL_WINDOW_OFFSET));
-                }
-                try self.inputQueue.append(self.allocator, .{ .mouseMotion = .{
-                    .pos = pos,
-                    .delta = .{ sdlEvent.motion.xrel, sdlEvent.motion.yrel },
-                    .buttons = .{
-                        .left = sdlEvent.motion.state & sdl.SDL_BUTTON_LMASK != 0,
-                        .middle = sdlEvent.motion.state & sdl.SDL_BUTTON_MMASK != 0,
-                        .right = sdlEvent.motion.state & sdl.SDL_BUTTON_RMASK != 0,
-                    },
-                } });
-            },
-            sdl.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
-                try self.inputQueue.append(self.allocator, .resize);
-            },
-            else => {},
-        }
+        try populateInputQueue(self, sdlEvent);
     }
 }
 
@@ -391,42 +400,13 @@ pub fn setPointer(self: *@This(), pointer: Pointer) void {
 pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget: Widget) !void {
     var frames: u64 = 0;
 
-    const targetFps = 60;
-    const targetFrameMs: u32 = 1000 / targetFps;
-
-    var redraws: enum { skip, redraw, redrawTwoFrames } = .redraw;
+    var drawNextFrame = true;
 
     while (!self.shouldClose()) {
-        const frameStart = sdl.SDL_GetTicks();
-
-        try self.pollEvents();
-        while (self.inputQueue.pop()) |event| {
-            if (DEBUG_LOG_EVENTS) {
-                std.log.debug("Event {any}", .{event});
-            }
-
-            if (event == .resize) {
-                redraws = .redrawTwoFrames;
-                continue;
-            }
-
-            if (self.eventHandler) |handler| {
-                if (try handler.handleEvent(event)) {
-                    redraws = .redraw;
-                    continue;
-                }
-            }
-            if (try parentWidget.handleEvent(event)) {
-                redraws = .redraw;
-                continue;
-            }
+        if (self.handleHover(parentWidget)) {
+            drawNextFrame = true;
         }
-
-        if (self.handleHover(parentWidget) and redraws != .redrawTwoFrames) {
-            redraws = .redraw;
-        }
-
-        while (redraws != .skip) {
+        if (drawNextFrame) {
             frames +%= 1;
             const title = try std.fmt.allocPrint(allocator, "Frames: {}", .{frames});
             defer allocator.free(title);
@@ -434,13 +414,30 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
 
             self.layout(parentWidget);
             try self.draw(parentWidget);
-            redraws = if (redraws == .redrawTwoFrames) .redraw else .skip;
+            drawNextFrame = false;
         }
 
-        const frameEnd = sdl.SDL_GetTicks() - frameStart;
-        if (frameEnd < targetFrameMs) {
-            const waitTime = targetFrameMs - frameEnd;
-            sdl.SDL_Delay(@truncate(waitTime));
+        try self.waitEvents();
+        while (self.inputQueue.pop()) |event| {
+            if (DEBUG_LOG_EVENTS) {
+                std.log.debug("Event {any}", .{event});
+            }
+
+            if (event == .resize) {
+                drawNextFrame = true;
+                continue;
+            }
+
+            if (self.eventHandler) |handler| {
+                if (try handler.handleEvent(event)) {
+                    drawNextFrame = true;
+                    continue;
+                }
+            }
+            if (try parentWidget.handleEvent(event)) {
+                drawNextFrame = true;
+                continue;
+            }
         }
     }
 }
