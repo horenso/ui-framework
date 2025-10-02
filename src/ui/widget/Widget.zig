@@ -14,10 +14,12 @@ const Vec2i = vec.Vec2i;
 
 ptr: *anyopaque,
 vtable: *const VTable,
+base: *Base,
 
 pub const Base = struct {
     app: *Application,
     size: Vec2f = .{ 0, 0 },
+    visibleArea: Vec4f = .{ 0, 0, 0, 0 },
 };
 
 pub const VTable = struct {

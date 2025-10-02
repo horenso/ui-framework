@@ -126,6 +126,13 @@ pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
     self.scrollbarX.visible = contentSize[0] > self.base.size[0];
     self.scrollbarY.visible = contentSize[1] > self.base.size[1];
 
+    self.child.base.visibleArea = .{
+        self.offset[0],
+        self.offset[1],
+        self.base.size[0],
+        self.base.size[1],
+    };
+
     self.child.layout(contentSize);
 
     if (self.scrollbarX.visible) {
@@ -407,6 +414,7 @@ pub fn widget(self: *@This()) Widget {
             .getMaxContentSize = getMaxContentSize,
             .getSize = getSize,
         },
+        .base = &self.base,
     };
 }
 

@@ -16,22 +16,6 @@ const Renderer = @import("Renderer.zig");
 
 const FONT_PATH = "res/VictorMonoAll/VictorMono-Medium.ttf";
 
-var charSet = blk: {
-    const chars: []const u8 = " !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~" ++ "öüäÖÜÄßẞ";
-    const n: usize = std.unicode.utf8CountCodepoints(chars) catch undefined;
-    var array = std.mem.zeroes([n]i32);
-
-    var viewer = std.unicode.Utf8View.initComptime(chars);
-    var it = viewer.iterator();
-
-    var index: usize = 0;
-    while (it.nextCodepoint()) |cp| {
-        array[index] = cp;
-        index += 1;
-    }
-    break :blk array;
-};
-
 library: freetype.FT_Library,
 fontFace: *freetype.FT_FaceRec,
 cache: std.AutoArrayHashMap(Key, *FontAtlas),

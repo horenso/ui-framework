@@ -9,6 +9,8 @@ const Vec2i = vecImport.Vec2i;
 const Color = @import("Color.zig");
 const FontAtlas = @import("FontManager.zig").FontAtlas;
 
+const DEBUG_DISABLE_CLIPPING = true;
+
 fn colorToSdl(color: Color) sdl.SDL_Color {
     return .{
         .r = color.r,
@@ -68,6 +70,9 @@ pub fn deinit(self: @This()) void {
 }
 
 pub fn setClip(self: *@This(), clip: Vec2f) void {
+    if (DEBUG_DISABLE_CLIPPING) {
+        return;
+    }
     self._clip = clip;
     if (!sdl.SDL_SetRenderClipRect(self.sdlRenderer, &.{
         .x = @intFromFloat(self.offset[0]),

@@ -98,6 +98,7 @@ pub fn widget(self: *@This()) Widget {
             .getMaxContentSize = getMaxContentSize,
             .getSize = getSize,
         },
+        .base = &self.base,
     };
 }
 
@@ -476,12 +477,23 @@ fn drawText(self: *const @This(), renderer: *Renderer) void {
     var index: usize = 0;
 
     while (it) |currentNode| {
-        const lineData = LineData.getFromNode(currentNode);
-        const codepoints = lineData.data.items;
-
         const indexFloat: f32 = @floatFromInt(index);
         const y: f32 = indexFloat * self.fontAtlas.height;
         const x: f32 = 0;
+
+        // skip lines that are not visible
+        if (y + self.fontAtlas.height < self.base.visibleArea[1]) {
+            it = currentNode.next;
+            index += 1;
+            continue;
+        }
+
+        if (y > self.base.visibleArea[1] + self.base.visibleArea[3]) {
+            break;
+        }
+
+        const lineData = LineData.getFromNode(currentNode);
+        const codepoints = lineData.data.items;
 
         if (index == self.cursor.row) {
             const rect: Vec4f = .{
@@ -495,13 +507,17 @@ fn drawText(self: *const @This(), renderer: *Renderer) void {
 
         var penX: f32 = 0;
         for (codepoints) |codepoint| {
-            renderer.drawCharacter(
-                self.base.app.allocator,
-                codepoint,
-                self.fontAtlas,
-                .{ penX, y },
-                TEXT_COLOR,
-            );
+            if (penX + self.fontAtlas.width >= self.base.visibleArea[0] and
+                penX <= self.base.visibleArea[0] + self.base.visibleArea[2])
+            {
+                renderer.drawCharacter(
+                    self.base.app.allocator,
+                    codepoint,
+                    self.fontAtlas,
+                    .{ penX, y },
+                    TEXT_COLOR,
+                );
+            }
             penX += self.fontAtlas.width;
         }
 

@@ -61,7 +61,7 @@ pub const MouseMotionEvent = struct {
 };
 
 pub const Event = union(enum) {
-    resize,
+    windowRefresh,
     mouseButton: MouseButtonEvent,
     mouseWheel: Vec2f,
     mouseMotion: MouseMotionEvent,

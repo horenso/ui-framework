@@ -374,8 +374,12 @@ inline fn populateInputQueue(self: *@This(), sdlEvent: sdl.SDL_Event) !void {
                 },
             } });
         },
-        sdl.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
-            try self.inputQueue.append(self.allocator, .resize);
+        sdl.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED,
+        sdl.SDL_EVENT_WINDOW_EXPOSED,
+        sdl.SDL_EVENT_WINDOW_SHOWN,
+        sdl.SDL_EVENT_WINDOW_RESTORED,
+        => {
+            try self.inputQueue.append(self.allocator, .windowRefresh);
         },
         else => {},
     }
@@ -423,7 +427,7 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
                 std.log.debug("Event {any}", .{event});
             }
 
-            if (event == .resize) {
+            if (event == .windowRefresh) {
                 drawNextFrame = true;
                 continue;
             }
