@@ -84,6 +84,7 @@ pub fn init(app: *Application, renderer: Renderer, fontManager: *FontManager) !@
 
 pub fn setScrollContainer(self: *@This(), scrollContainer: *ScrollContainer) void {
     self.scrollProxy.scrollContainer = scrollContainer;
+    scrollContainer.scrollingSpeed = self.fontAtlas.height * 2;
 }
 
 pub fn widget(self: *@This()) Widget {
@@ -138,6 +139,7 @@ fn createNewLine(self: *@This()) !*LineData {
 pub fn setFontSize(self: *@This(), fontManager: *FontManager, fontSize: i32) void {
     self.fontAtlas = fontManager.getFontAtlas(self.base.app.allocator, self.base.app.renderer, fontSize) catch @panic("unexpected");
     self.cursor.width = getCursorWidth(self.fontAtlas.width);
+    self.scrollProxy.setScrollingSpeed(self.fontAtlas.height * 2);
     std.log.debug("new font size {d}", .{fontSize});
     self.calculateCursorPos();
 }

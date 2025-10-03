@@ -65,9 +65,6 @@ const Scrollbar = struct {
     }
 };
 
-const SCROLL_SPEED = 40.0;
-const SCROLL_SPEED_VEC: Vec2f = @splat(SCROLL_SPEED);
-
 const SCROLLBAR_BACKGROUND_COLOR = Color.init(200, 200, 200, 150);
 const SCROLLBAR_THUMB_COLOR = Color.init(60, 60, 60, 128);
 const SCROLLBAR_THUMB_HOVERING_COLOR = Color.init(60, 60, 60, 200);
@@ -76,17 +73,19 @@ const SCROLLBAR_THUMB_DRAGGING_COLOR = Color.init(60, 60, 200, 200);
 outlineColor: Color,
 
 base: Widget.Base,
+scrollingSpeed: f32,
 child: Widget,
 offset: Vec2f = .{ 0, 0 },
 
 scrollbarX: Scrollbar = .{ .kind = .x },
 scrollbarY: Scrollbar = .{ .kind = .y },
 
-pub fn init(app: *Application, child: Widget) @This() {
+pub fn init(app: *Application, child: Widget, scrollingSpeed: f32) @This() {
     return .{
         .base = .{ .app = app },
         .child = child,
         .outlineColor = Color.random(),
+        .scrollingSpeed = scrollingSpeed,
     };
 }
 
@@ -245,10 +244,10 @@ fn handleOwnEvent(self: *@This(), event: Event) bool {
 
             var newOffset = self.offset;
             if (canScrollX) {
-                newOffset[0] = self.offset[0] + mouseWheelMove[0] * SCROLL_SPEED;
+                newOffset[0] = self.offset[0] + mouseWheelMove[0] * self.scrollingSpeed;
             }
             if (canScrollY) {
-                newOffset[1] = self.offset[1] - mouseWheelMove[1] * SCROLL_SPEED;
+                newOffset[1] = self.offset[1] - mouseWheelMove[1] * self.scrollingSpeed;
             }
             self.setAndClampOffset(contentSize, newOffset);
 

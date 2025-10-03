@@ -134,7 +134,7 @@ pub fn getWindowSize(self: *@This()) Vec2f {
     return .{ @floatFromInt(width), @floatFromInt(height) };
 }
 
-pub fn setWindowTitle(self: *@This(), title: []const u8) void {
+pub fn setWindowTitle(self: *@This(), title: [:0]const u8) void {
     if (!sdl.SDL_SetWindowTitle(self._sdlState.window, @ptrCast(title))) {
         std.log.warn("Could not set window title: {s}", .{sdl.SDL_GetError()});
     }
@@ -406,14 +406,33 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
 
     var drawNextFrame = true;
 
+    var titleBuffer = try allocator.create([100]u8);
+    defer allocator.free(titleBuffer);
+
     while (!self.shouldClose()) {
         if (self.handleHover(parentWidget)) {
             drawNextFrame = true;
         }
         if (drawNextFrame) {
+            const startTime = sdl.SDL_GetPerformanceCounter();
+            defer {
+                const endTime = sdl.SDL_GetPerformanceCounter();
+                const elapsedTimeTicks = endTime - startTime;
+
+                const displayId = sdl.SDL_GetDisplayForWindow(self._sdlState.window);
+                const displayInfo = sdl.SDL_GetCurrentDisplayMode(displayId);
+
+                if (displayInfo) |d| {
+                    std.log.info("Rendering elapsedTimeTicks: {any} {any}", .{
+                        elapsedTimeTicks,
+                        d.*,
+                    });
+                }
+            }
+
             frames +%= 1;
-            const title = try std.fmt.allocPrint(allocator, "Frames: {}", .{frames});
-            defer allocator.free(title);
+            const title: [:0]const u8 = @ptrCast(try std.fmt.bufPrint(titleBuffer[0..], "Frames: {}\x00", .{frames}));
+            std.log.debug("{s}", .{title});
             self.setWindowTitle(title);
 
             self.layout(parentWidget);

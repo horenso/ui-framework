@@ -39,3 +39,9 @@ pub fn goToBottom(self: *@This(), widget: Widget, size: Vec2f) void {
         sc.offset[1] = maxScroll[1];
     }
 }
+
+pub fn setScrollingSpeed(self: *@This(), speed: f32) void {
+    if (self.scrollContainer) |sc| {
+        sc.scrollingSpeed = speed;
+    }
+}

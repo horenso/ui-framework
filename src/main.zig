@@ -97,7 +97,7 @@ pub fn main() anyerror!void {
     var textInputWidget = textInput.widget();
     defer textInputWidget.deinit();
 
-    var scrollContainer = ScrollContainer.init(&app, textInputWidget);
+    var scrollContainer = ScrollContainer.init(&app, textInputWidget, 40);
     var scrollContainerWidget = scrollContainer.widget();
     defer scrollContainerWidget.deinit();
 
