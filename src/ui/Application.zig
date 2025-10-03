@@ -45,7 +45,7 @@ const SdlState = struct {
 /// For debugging. Draws the widget in the middle of the widget, making the overflow visible.
 const DEBUG_VIRTUAL_WINDOW = false;
 const DEBUG_VIRTUAL_WINDOW_OFFSET = 50;
-const DEBUG_LOG_EVENTS = false;
+const DEBUG_LOG_EVENTS = true;
 
 _sdlState: SdlState,
 _shouldClose: bool = false,
@@ -409,34 +409,28 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
     var titleBuffer = try allocator.create([100]u8);
     defer allocator.free(titleBuffer);
 
+    var timeSinceLastDraw = sdl.SDL_GetPerformanceCounter();
+    const frequency = sdl.SDL_GetPerformanceFrequency();
+
     while (!self.shouldClose()) {
-        if (self.handleHover(parentWidget)) {
-            drawNextFrame = true;
-        }
         if (drawNextFrame) {
-            const startTime = sdl.SDL_GetPerformanceCounter();
-            defer {
-                const endTime = sdl.SDL_GetPerformanceCounter();
-                const elapsedTimeTicks = endTime - startTime;
-
-                const displayId = sdl.SDL_GetDisplayForWindow(self._sdlState.window);
-                const displayInfo = sdl.SDL_GetCurrentDisplayMode(displayId);
-
-                if (displayInfo) |d| {
-                    std.log.info("Rendering elapsedTimeTicks: {any} {any}", .{
-                        elapsedTimeTicks,
-                        d.*,
-                    });
-                }
-            }
-
             frames +%= 1;
             const title: [:0]const u8 = @ptrCast(try std.fmt.bufPrint(titleBuffer[0..], "Frames: {}\x00", .{frames}));
-            std.log.debug("{s}", .{title});
             self.setWindowTitle(title);
 
             self.layout(parentWidget);
+
+            const timeBeforeDraw = (sdl.SDL_GetPerformanceCounter() - timeSinceLastDraw) / (frequency / 1000);
             try self.draw(parentWidget);
+            const timeAfterDraw = (sdl.SDL_GetPerformanceCounter() - timeSinceLastDraw) / (frequency / 1000);
+
+            std.log.debug("times: {any} {any}", .{
+                timeBeforeDraw,
+                timeAfterDraw,
+            });
+
+            timeSinceLastDraw = sdl.SDL_GetPerformanceCounter();
+
             drawNextFrame = false;
         }
 
@@ -461,6 +455,9 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
                 drawNextFrame = true;
                 continue;
             }
+        }
+        if (self.handleHover(parentWidget)) {
+            drawNextFrame = true;
         }
     }
 }
