@@ -24,9 +24,11 @@ pub const Base = struct {
 
 pub const VTable = struct {
     deinit: *const fn (*anyopaque) void,
-    layout: *const fn (*anyopaque, size: Vec2f) void,
     handleHover: *const fn (*anyopaque, pos: Vec2f) void,
+
+    layout: *const fn (*anyopaque) void,
     draw: *const fn (*const anyopaque, renderer: *Renderer) anyerror!void,
+
     /// Returns true if the event was handled, false otherwise.
     handleEvent: *const fn (*anyopaque, event: Event) anyerror!bool,
     getMaxContentSize: *const fn (*const anyopaque) Vec2f,
@@ -43,7 +45,8 @@ pub fn getMaxContentSize(self: @This()) Vec2f {
 }
 
 pub fn layout(self: @This(), size: Vec2f) void {
-    return self.vtable.layout(self.ptr, size);
+    self.base.size = size;
+    return self.vtable.layout(self.ptr);
 }
 
 pub fn handleHover(self: @This(), pos: Vec2f) void {

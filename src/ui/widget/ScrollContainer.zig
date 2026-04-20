@@ -114,9 +114,8 @@ pub fn handleHover(opaquePtr: *anyopaque, pos: Vec2f) void {
     }
 }
 
-pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
+pub fn layout(opaquePtr: *anyopaque) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
-    self.base.size = size;
 
     const contentSize = self.child.getMaxContentSize();
 

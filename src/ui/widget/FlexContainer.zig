@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const sdl = @import("sdl");
+const sdl = @import("../sdl.zig").sdl;
 
 const Application = @import("../Application.zig");
 const Color = @import("../Color.zig");
@@ -12,7 +12,17 @@ const vec = @import("../vec.zig");
 const Vec2f = vec.Vec2f;
 const Vec4f = vec.Vec4f;
 
-text: []const u8,
+const Child = struct {
+    widget: *Widget,
+    sizing: [2]SizingConstraint,
+};
+
+pub const SizingConstraint = union(enum) {
+    fixed: f32,
+    grow,
+};
+
+children: []const Widget,
 
 pub fn init(text: []const u8) @This() {
     return .{ .text = text };
