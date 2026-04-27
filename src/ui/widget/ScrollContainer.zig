@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const sdl = @import("../sdl.zig").sdl;
+const sdl = @import("zig");
 
 const Application = @import("../Application.zig");
 const Color = @import("../Color.zig");

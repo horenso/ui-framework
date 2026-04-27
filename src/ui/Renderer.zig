@@ -1,5 +1,6 @@
 const std = @import("std");
-const sdl = @import("sdl.zig").sdl;
+
+const sdl = @import("sdl");
 
 const vecImport = @import("vec.zig");
 const Vec2f = vecImport.Vec2f;

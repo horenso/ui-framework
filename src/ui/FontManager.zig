@@ -1,10 +1,8 @@
 const std = @import("std");
-const sdl = @import("sdl.zig").sdl;
 
-const freetype = @cImport({
-    @cInclude("ft2build.h");
-    @cInclude("freetype/freetype.h");
-});
+const sdl = @import("sdl");
+
+const freetype = @import("freetype");
 
 const vec = @import("./vec.zig");
 const Vec2f = vec.Vec2f;
@@ -18,9 +16,9 @@ const FONT_PATH = "res/VictorMonoAll/VictorMono-Medium.ttf";
 
 library: freetype.FT_Library,
 fontFace: *freetype.FT_FaceRec,
-cache: std.AutoArrayHashMap(Key, *FontAtlas),
+cache: std.AutoArrayHashMapUnmanaged(Key, *FontAtlas),
 
-pub fn init(allocator: std.mem.Allocator) !@This() {
+pub fn init() !@This() {
     var library: freetype.FT_Library = undefined;
     const initError = freetype.FT_Init_FreeType(&library);
     if (initError != 0) {
@@ -37,7 +35,7 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     return @This(){
         .library = library,
         .fontFace = fontFace,
-        .cache = .init(allocator),
+        .cache = .{},
     };
 }
 
@@ -46,7 +44,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
         fontAtlas.glyphs.deinit(allocator);
         allocator.destroy(fontAtlas);
     }
-    self.cache.deinit();
+    self.cache.deinit(allocator);
 
     var err: c_int = 0;
     err += freetype.FT_Done_Face(self.fontFace);
@@ -100,7 +98,7 @@ pub fn getFontAtlas(
         .height = height,
         .baseline = baseline,
     };
-    try self.cache.put(size, atlas);
+    try self.cache.put(allocator, size, atlas);
 
     return atlas;
 }

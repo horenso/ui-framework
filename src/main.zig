@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const sdl = @import("ui/sdl.zig").sdl;
+const sdl = @import("sdl");
 
 const Application = @import("ui/Application.zig");
 const Event = @import("ui/event.zig").Event;
@@ -9,21 +9,21 @@ const TextInput = @import("ui/widget/TextInput.zig");
 const Widget = @import("ui/widget/Widget.zig");
 const ScrollContainer = @import("ui/widget/ScrollContainer.zig");
 
-fn loadFile(allocator: std.mem.Allocator, path: []const u8, textInput: *TextInput) !void {
-    const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
-    defer file.close();
+fn loadFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8, textInput: *TextInput) !void {
+    const file = try std.Io.Dir.openFile(.cwd(), io, path, .{ .mode = .read_only });
+    defer file.close(io);
 
     var buffer = std.mem.zeroes([1024]u8);
-    var reader = std.fs.File.Reader.init(file, &buffer);
+    var reader = std.Io.File.Reader.init(file, io, &buffer);
     try textInput.load(allocator, &reader.interface);
 }
 
-fn saveFile(path: []const u8, textInput: *TextInput) !void {
-    const file = try std.fs.cwd().openFile(path, .{ .mode = .read_write });
-    defer file.close();
+fn saveFile(io: std.Io, path: []const u8, textInput: *TextInput) !void {
+    const file = try std.Io.Dir.openFile(.cwd(), io, path, .{ .mode = .read_write });
+    defer file.close(io);
 
     var buffer = std.mem.zeroes([1024]u8);
-    var writer = std.fs.File.Writer.init(file, &buffer);
+    var writer = std.Io.File.Writer.init(file, io, &buffer);
     try textInput.save(&writer.interface);
 
     std.log.debug("File {s} saved", .{path});
@@ -34,6 +34,7 @@ const Context = struct {
     textInput: *TextInput,
     scrollContainer: *ScrollContainer,
     filePath: ?[]const u8,
+    io: std.Io,
 
     pub fn eventHandler(self: *@This()) EventHandler {
         return .{
@@ -60,7 +61,7 @@ const Context = struct {
                         return true;
                     } else if (keyEvent.ctrl and keyEvent.code == .s) {
                         if (self.filePath) |path| {
-                            try saveFile(path, self.textInput);
+                            try saveFile(self.io, path, self.textInput);
                             return true;
                         }
                     }
@@ -72,19 +73,8 @@ const Context = struct {
     }
 };
 
-pub fn main() anyerror!void {
-    var debugAllocator = std.heap.DebugAllocator(.{
-        .verbose_log = false,
-    }){};
-    const allocator = debugAllocator.allocator();
-    defer {
-        const result = debugAllocator.deinit();
-        if (result == .ok) {
-            std.log.debug("alloc.deinit() => ok", .{});
-        } else {
-            std.log.debug("alloc.deinit() => leak", .{});
-        }
-    }
+pub fn main(init: std.process.Init) anyerror!void {
+    const allocator = init.gpa;
 
     var app = try Application.init(.{
         .width = 800,
@@ -106,12 +96,12 @@ pub fn main() anyerror!void {
     var filePath: ?[]const u8 = null;
 
     {
-        var argsIt = try std.process.ArgIterator.initWithAllocator(allocator);
+        var argsIt = try init.minimal.args.iterateAllocator(allocator);
         defer argsIt.deinit();
 
-        _ = argsIt.next(); // Skip name of executable
+        _ = argsIt.skip(); // Skip name of executable
         if (argsIt.next()) |firstArg| {
-            try loadFile(allocator, firstArg, &textInput);
+            try loadFile(allocator, init.io, firstArg, &textInput);
             filePath = firstArg;
         }
     }
@@ -121,6 +111,7 @@ pub fn main() anyerror!void {
         .filePath = filePath,
         .scrollContainer = &scrollContainer,
         .textInput = &textInput,
+        .io = init.io,
     };
 
     app.eventHandler = context.eventHandler();

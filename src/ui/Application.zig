@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const sdl = @import("./sdl.zig").sdl;
+const sdl = @import("sdl");
 
 const ButtonType = eventImport.MouseButton;
 const Color = @import("Color.zig");
@@ -102,7 +102,7 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{ OutOfM
     return .{
         .allocator = allocator,
         .inputQueue = try .initCapacity(allocator, 3),
-        .fontManager = FontManager.init(allocator) catch return error.InitFailure,
+        .fontManager = FontManager.init() catch return error.InitFailure,
         .renderer = Renderer.init(sdlRenderer),
         ._sdlState = .{
             .window = window,
@@ -406,7 +406,7 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
 
     var drawNextFrame = true;
 
-    var titleBuffer = try allocator.create([100]u8);
+    const titleBuffer = try allocator.alloc(u8, 100);
     defer allocator.free(titleBuffer);
 
     var timeSinceLastDraw = sdl.SDL_GetPerformanceCounter();
@@ -415,7 +415,7 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
     while (!self.shouldClose()) {
         if (drawNextFrame) {
             frames +%= 1;
-            const title: [:0]const u8 = @ptrCast(try std.fmt.bufPrint(titleBuffer[0..], "Frames: {}\x00", .{frames}));
+            const title: [:0]const u8 = @ptrCast(try std.fmt.bufPrint(titleBuffer, "Frames: {}\x00", .{frames}));
             self.setWindowTitle(title);
 
             self.layout(parentWidget);
