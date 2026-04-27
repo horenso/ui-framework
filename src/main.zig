@@ -48,15 +48,15 @@ const Context = struct {
         switch (event) {
             .key => |keyEvent| {
                 if (keyEvent.type == .pressed) {
-                    if (keyEvent.ctrl and keyEvent.code == .num1) {
+                    if (keyEvent.code == .f1) {
                         const newFontSize: i32 = @min(self.textInput.fontAtlas.fontSize + 4, 52);
                         self.textInput.setFontSize(&self.app.fontManager, newFontSize);
                         return true;
-                    } else if (keyEvent.ctrl and keyEvent.code == .num2) {
+                    } else if (keyEvent.code == .f2) {
                         const newFontSize: i32 = @max(self.textInput.fontAtlas.fontSize - 4, 12);
                         self.textInput.setFontSize(&self.app.fontManager, newFontSize);
                         return true;
-                    } else if (keyEvent.ctrl and keyEvent.code == .num3) {
+                    } else if (keyEvent.code == .f3) {
                         self.textInput.showGrid = !self.textInput.showGrid;
                         return true;
                     } else if (keyEvent.ctrl and keyEvent.code == .s) {

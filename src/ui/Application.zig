@@ -260,6 +260,19 @@ fn handleKeyEvent(self: *@This(), sdlScancode: sdl.SDL_Scancode, sdlEventType: u
         sdl.SDL_SCANCODE_HOME => .home,
         sdl.SDL_SCANCODE_END => .end,
 
+        sdl.SDL_SCANCODE_F1 => .f1,
+        sdl.SDL_SCANCODE_F2 => .f2,
+        sdl.SDL_SCANCODE_F3 => .f3,
+        sdl.SDL_SCANCODE_F4 => .f4,
+        sdl.SDL_SCANCODE_F5 => .f5,
+        sdl.SDL_SCANCODE_F6 => .f6,
+        sdl.SDL_SCANCODE_F7 => .f7,
+        sdl.SDL_SCANCODE_F8 => .f8,
+        sdl.SDL_SCANCODE_F9 => .f9,
+        sdl.SDL_SCANCODE_F10 => .f10,
+        sdl.SDL_SCANCODE_F11 => .f11,
+        sdl.SDL_SCANCODE_F12 => .f12,
+
         else => .unknown,
     };
 
