@@ -4,13 +4,13 @@ const sdl = @import("sdl");
 
 const freetype = @import("freetype");
 
-const vec = @import("./vec.zig");
+const vec = @import("vec.zig");
 const Vec2f = vec.Vec2f;
 const Vec4f = vec.Vec4f;
 const Vec2i = vec.Vec2i;
 
 const Key = i32;
-const Renderer = @import("Renderer.zig");
+const Renderer = @import("rendering/Renderer.zig");
 
 const FONT_PATH = "res/VictorMonoAll/VictorMono-Medium.ttf";
 
@@ -76,14 +76,7 @@ pub fn getFontAtlas(
     const height: f32 = @floatFromInt(metrics.height >> 6);
     const baseline: f32 = @floatFromInt(metrics.descender >> 6);
 
-    // Create SDL texture atlas (RGBA or A8)
-    const texture = sdl.SDL_CreateTexture(
-        renderer.sdlRenderer,
-        sdl.SDL_PIXELFORMAT_RGBA32,
-        sdl.SDL_TEXTUREACCESS_STREAMING,
-        1024,
-        1024,
-    ) orelse return error.SDLError;
+    const texture = renderer.createTexture(1024, 1024);
 
     const atlas = try allocator.create(FontAtlas);
     atlas.* = .{
@@ -115,7 +108,7 @@ pub const FontAtlas = struct {
     // For now we always give the one pointer to the same font face
     // later we need a cache for the fontFace and a separate one for the size
     fontFace: *freetype.FT_FaceRec,
-    texture: *sdl.SDL_Texture,
+    texture: Renderer.Texture,
     glyphs: std.AutoHashMapUnmanaged(u32, GlyphInfo),
     nextX: i32,
     nextY: i32,
@@ -164,8 +157,9 @@ pub const FontAtlas = struct {
             }
         }
 
+        const sdlTexture: *sdl.SDL_Texture = @ptrCast(@alignCast(atlas.texture));
         _ = sdl.SDL_UpdateTexture(
-            atlas.texture,
+            sdlTexture,
             &dst_rect,
             @ptrCast(glyph_buffer),
             @as(c_int, @intCast(bmp.width)) * 4,

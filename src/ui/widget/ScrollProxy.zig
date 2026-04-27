@@ -3,8 +3,8 @@ const std = @import("std");
 const Application = @import("../Application.zig");
 const Event = @import("../event.zig").Event;
 const FontManager = @import("../FontManager.zig");
-const Widget = @import("./Widget.zig");
-const ScrollContainer = @import("./ScrollContainer.zig");
+const Widget = @import("Widget.zig");
+const ScrollContainer = @import("ScrollContainer.zig");
 
 const vec = @import("../vec.zig");
 const Vec2f = vec.Vec2f;

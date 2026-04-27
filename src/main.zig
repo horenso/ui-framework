@@ -59,7 +59,7 @@ const Context = struct {
                     } else if (keyEvent.code == .f3) {
                         self.textInput.showGrid = !self.textInput.showGrid;
                         return true;
-                    } else if (keyEvent.ctrl and keyEvent.code == .s) {
+                    } else if (keyEvent.code == .f4) {} else if (keyEvent.ctrl and keyEvent.code == .s) {
                         if (self.filePath) |path| {
                             try saveFile(self.io, path, self.textInput);
                             return true;

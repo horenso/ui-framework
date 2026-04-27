@@ -7,10 +7,10 @@ const Color = @import("../Color.zig");
 const Event = @import("../event.zig").Event;
 const FontAtlas = FontManager.FontAtlas;
 const FontManager = @import("../FontManager.zig");
-const Widget = @import("./Widget.zig");
-const Renderer = @import("../Renderer.zig");
-const ScrollContainer = @import("./ScrollContainer.zig");
-const ScrollProxy = @import("./ScrollProxy.zig");
+const Widget = @import("Widget.zig");
+const Renderer = @import("../rendering/Renderer.zig");
+const ScrollContainer = @import("ScrollContainer.zig");
+const ScrollProxy = @import("ScrollProxy.zig");
 const Utf8Reader = @import("../Utf8Reader.zig");
 
 const vec = @import("../vec.zig");
@@ -92,13 +92,13 @@ pub fn widget(self: *@This()) Widget {
     return .{
         .ptr = self,
         .vtable = &.{
-            .deinit = deinit,
-            .handleHover = handleHover,
-            .layout = layout,
-            .draw = draw,
-            .handleEvent = handleEvent,
-            .getMaxContentSize = getMaxContentSize,
-            .getSize = getSize,
+            .deinit = deinitImpl,
+            .handleHover = handleHoverImpl,
+            .layout = layoutImpl,
+            .draw = drawImpl,
+            .handleEvent = handleEventImpl,
+            .getMaxContentSize = getMaxContentSizeImpl,
+            .getSize = getSizeImpl,
         },
         .base = &self.base,
     };
@@ -348,12 +348,12 @@ fn goToPreviousWord(self: *@This()) void {
     self.goOneLeft();
 }
 
-pub fn deinit(opaquePtr: *anyopaque) void {
+pub fn deinitImpl(opaquePtr: *anyopaque) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     self.deinitLines();
 }
 
-pub fn handleEvent(opaquePtr: *anyopaque, event: Event) !bool {
+pub fn handleEventImpl(opaquePtr: *anyopaque, event: Event) !bool {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     switch (event) {
         .key => |keyEvent| {
@@ -454,17 +454,17 @@ inline fn getMaxContentSizeInner(self: *const @This()) Vec2f {
     return r;
 }
 
-pub fn getMaxContentSize(opaquePtr: *const anyopaque) Vec2f {
+pub fn getMaxContentSizeImpl(opaquePtr: *const anyopaque) Vec2f {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
     return self.getMaxContentSizeInner();
 }
 
-pub fn layout(opaquePtr: *anyopaque, size: Vec2f) void {
+pub fn layoutImpl(opaquePtr: *anyopaque, size: Vec2f) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     self.base.size = size;
 }
 
-pub fn handleHover(opaquePtr: *anyopaque, pos: Vec2f) void {
+pub fn handleHoverImpl(opaquePtr: *anyopaque, pos: Vec2f) void {
     const self: *@This() = @ptrCast(@alignCast(opaquePtr));
     _ = pos; // We set the cursor to text in the entire text area.
     self.base.app.setPointer(.text);
@@ -570,7 +570,7 @@ fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
     }
 }
 
-pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
+pub fn drawImpl(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
     renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, self.outlineColor);
@@ -588,7 +588,7 @@ pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     }, CURSOR_COLOR);
 }
 
-pub fn getSize(opaquePtr: *const anyopaque) Vec2f {
+pub fn getSizeImpl(opaquePtr: *const anyopaque) Vec2f {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
     return self.base.size;
 }

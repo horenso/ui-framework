@@ -5,7 +5,7 @@ const sdl = @import("zig");
 const Application = @import("../Application.zig");
 const Color = @import("../Color.zig");
 const Event = @import("../event.zig").Event;
-const Renderer = @import("../Renderer.zig");
+const Renderer = @import("../rendering/Renderer.zig");
 
 const vec = @import("../vec.zig");
 const Vec2f = vec.Vec2f;

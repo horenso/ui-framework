@@ -11,9 +11,10 @@ const FontManager = @import("FontManager.zig");
 const KeyCode = eventImport.KeyCode;
 const KeyEvent = eventImport.KeyEvent;
 const KeyEventType = eventImport.KeyEventType;
-const Renderer = @import("Renderer.zig");
+const Renderer = @import("rendering/Renderer.zig");
+const SimpleSdlRenderer = @import("rendering/SimpleSdlRenderer.zig");
 const TextEvent = eventImport.TextEvent;
-const Widget = @import("./widget/Widget.zig");
+const Widget = @import("widget/Widget.zig");
 
 const vec = @import("vec.zig");
 const Vec2f = vec.Vec2f;
@@ -99,11 +100,14 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{ OutOfM
         .move = sdl.SDL_CreateSystemCursor(sdl.SDL_SYSTEM_CURSOR_MOVE) orelse return error.InitFailure,
     };
 
+    const sdlBackend = try allocator.create(SimpleSdlRenderer);
+    sdlBackend.* = SimpleSdlRenderer.init(sdlRenderer);
+
     return .{
         .allocator = allocator,
         .inputQueue = try .initCapacity(allocator, 3),
         .fontManager = FontManager.init() catch return error.InitFailure,
-        .renderer = Renderer.init(sdlRenderer),
+        .renderer = sdlBackend.renderer(),
         ._sdlState = .{
             .window = window,
             .pointers = pointers,
@@ -119,7 +123,9 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     _ = sdl.SDL_DestroyCursor(self._sdlState.pointers.text);
     _ = sdl.SDL_DestroyCursor(self._sdlState.pointers.move);
 
-    self.renderer.deinit();
+    const sdlBackend: *SimpleSdlRenderer = @ptrCast(@alignCast(self.renderer.ptr));
+    sdlBackend.deinit();
+    self.allocator.destroy(sdlBackend);
     sdl.SDL_DestroyWindow(self._sdlState.window);
 
     sdl.SDL_Quit();
@@ -389,7 +395,6 @@ inline fn populateInputQueue(self: *@This(), sdlEvent: sdl.SDL_Event) !void {
         },
         sdl.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED,
         sdl.SDL_EVENT_WINDOW_EXPOSED,
-        sdl.SDL_EVENT_WINDOW_SHOWN,
         sdl.SDL_EVENT_WINDOW_RESTORED,
         => {
             try self.inputQueue.append(self.allocator, .windowRefresh);
