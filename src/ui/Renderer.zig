@@ -39,7 +39,20 @@ checkerTexture: *sdl.SDL_Texture,
 offset: Vec2f = .{ 0, 0 },
 _clip: Vec2f = .{ 0, 0 },
 
-pub fn init(sdlRenderer: *sdl.SDL_Renderer) @This() {
+pub fn init(sdlWindow: *sdl.SDL_Window) !@This() {
+    const sdlRenderer = sdl.SDL_CreateRenderer(sdlWindow, null) orelse {
+        std.log.err("SDL_CreateRenderer() Error: {s}", .{sdl.SDL_GetError()});
+        return error.InitFailure;
+    };
+
+    if (!sdl.SDL_SetRenderDrawBlendMode(sdlRenderer, sdl.SDL_BLENDMODE_BLEND)) {
+        std.log.warn("Could not enable blend mode: {s}", .{sdl.SDL_GetError()});
+    }
+
+    if (!sdl.SDL_SetRenderVSync(sdlRenderer, 1)) {
+        std.log.warn("Could not enable VSync: {s}", .{sdl.SDL_GetError()});
+    }
+
     _ = sdl.SDL_RenderClear(sdlRenderer);
 
     const pixels = [16]u32{

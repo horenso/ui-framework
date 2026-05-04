@@ -70,8 +70,6 @@ const SCROLLBAR_THUMB_COLOR = Color.init(60, 60, 60, 128);
 const SCROLLBAR_THUMB_HOVERING_COLOR = Color.init(60, 60, 60, 200);
 const SCROLLBAR_THUMB_DRAGGING_COLOR = Color.init(60, 60, 200, 200);
 
-outlineColor: Color,
-
 base: Widget.Base,
 scrollingSpeed: f32,
 child: Widget,
@@ -84,7 +82,6 @@ pub fn init(app: *Application, child: Widget, scrollingSpeed: f32) @This() {
     return .{
         .base = .{ .app = app },
         .child = child,
-        .outlineColor = Color.random(),
         .scrollingSpeed = scrollingSpeed,
     };
 }
@@ -159,7 +156,12 @@ pub fn layout(opaquePtr: *anyopaque) void {
 pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
-    renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, self.outlineColor);
+    if (self.base.app.debugDrawOutlines) {
+        renderer.outline(
+            .{ 0, 0, self.base.size[0], self.base.size[1] },
+            Application.DEBUG_OUTLINE_COLOR,
+        );
+    }
 
     {
         renderer.setClip(.{ self.base.size[0], self.base.size[1] });

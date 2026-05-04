@@ -43,9 +43,12 @@ const SdlState = struct {
 };
 
 /// For debugging. Draws the widget in the middle of the widget, making the overflow visible.
-const DEBUG_VIRTUAL_WINDOW = false;
 const DEBUG_VIRTUAL_WINDOW_OFFSET = 50;
 const DEBUG_LOG_EVENTS = true;
+pub const DEBUG_OUTLINE_COLOR: Color = .{ .r = 255, .g = 0, .b = 0, .a = 255 };
+
+debugDrawVirtualWindow: bool = false,
+debugDrawOutlines: bool = false,
 
 _sdlState: SdlState,
 _shouldClose: bool = false,
@@ -69,28 +72,17 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{ OutOfM
         return error.InitFailure;
     }
 
-    const window = sdl.SDL_CreateWindow(
+    const sdlWindow = sdl.SDL_CreateWindow(
         config.title,
         config.width,
         config.height,
         sdl.SDL_WINDOW_VULKAN | sdl.SDL_WINDOW_RESIZABLE,
     ) orelse return error.InitFailure;
 
-    _ = sdl.SDL_SetWindowMinimumSize(window, 300, 300);
-    _ = sdl.SDL_StartTextInput(window);
+    _ = sdl.SDL_SetWindowMinimumSize(sdlWindow, 300, 300);
+    _ = sdl.SDL_StartTextInput(sdlWindow);
 
-    const sdlRenderer = sdl.SDL_CreateRenderer(window, null) orelse {
-        std.log.err("SDL_CreateRenderer() Error: {s}", .{sdl.SDL_GetError()});
-        return error.InitFailure;
-    };
-
-    if (!sdl.SDL_SetRenderDrawBlendMode(sdlRenderer, sdl.SDL_BLENDMODE_BLEND)) {
-        std.log.warn("Could not enable blend mode: {s}", .{sdl.SDL_GetError()});
-    }
-
-    if (!sdl.SDL_SetRenderVSync(sdlRenderer, 1)) {
-        std.log.warn("Could not enable VSync: {s}", .{sdl.SDL_GetError()});
-    }
+    const renderer = try Renderer.init(sdlWindow);
 
     // Set the I-beam cursor
     const pointers: SdlPointers = .{
@@ -103,9 +95,9 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{ OutOfM
         .allocator = allocator,
         .inputQueue = try .initCapacity(allocator, 3),
         .fontManager = FontManager.init() catch return error.InitFailure,
-        .renderer = Renderer.init(sdlRenderer),
+        .renderer = renderer,
         ._sdlState = .{
-            .window = window,
+            .window = sdlWindow,
             .pointers = pointers,
         },
     };
@@ -143,7 +135,7 @@ pub fn setWindowTitle(self: *@This(), title: [:0]const u8) void {
 pub fn layout(self: *@This(), topWidget: Widget) void {
     const size = self.getWindowSize();
 
-    if (DEBUG_VIRTUAL_WINDOW) {
+    if (self.debugDrawVirtualWindow) {
         topWidget.layout(size - @as(Vec2f, @splat(2 * DEBUG_VIRTUAL_WINDOW_OFFSET)));
     } else {
         topWidget.layout(size);
@@ -156,7 +148,7 @@ pub fn handleHover(self: *@This(), topWidget: Widget) bool {
     var mousePos: Vec2f = undefined;
     _ = sdl.SDL_GetMouseState(&mousePos[0], &mousePos[1]);
 
-    const windowBounce: Vec4f = if (DEBUG_VIRTUAL_WINDOW) .{
+    const windowBounce: Vec4f = if (self.debugDrawVirtualWindow) .{
         DEBUG_VIRTUAL_WINDOW_OFFSET,
         DEBUG_VIRTUAL_WINDOW_OFFSET,
         size[0] - 2 * DEBUG_VIRTUAL_WINDOW_OFFSET,
@@ -171,7 +163,7 @@ pub fn handleHover(self: *@This(), topWidget: Widget) bool {
     self.setPointer(.default);
 
     if (vec.isVec2fInsideVec4f(windowBounce, mousePos)) {
-        if (DEBUG_VIRTUAL_WINDOW) {
+        if (self.debugDrawVirtualWindow) {
             mousePos -= @as(Vec2f, @splat(DEBUG_VIRTUAL_WINDOW_OFFSET));
         }
         topWidget.handleHover(mousePos);
@@ -190,10 +182,10 @@ pub fn draw(self: *@This(), topWidget: Widget) !void {
     }
     self.renderer.clear(Color.init(255, 255, 255, 255));
 
-    if (DEBUG_VIRTUAL_WINDOW) {
+    if (self.debugDrawVirtualWindow) {
         self.renderer.offset += @splat(DEBUG_VIRTUAL_WINDOW_OFFSET);
-        defer self.renderer.offset -= @splat(DEBUG_VIRTUAL_WINDOW_OFFSET);
         try topWidget.draw(&self.renderer);
+        self.renderer.offset -= @splat(DEBUG_VIRTUAL_WINDOW_OFFSET);
     } else {
         try topWidget.draw(&self.renderer);
     }
@@ -334,7 +326,7 @@ inline fn populateInputQueue(self: *@This(), sdlEvent: sdl.SDL_Event) !void {
                 sdlEvent.button.x,
                 sdlEvent.button.y,
             };
-            if (DEBUG_VIRTUAL_WINDOW) {
+            if (self.debugDrawVirtualWindow) {
                 const size = self.getWindowSize();
                 if (!vec.isVec2fInsideVec4f(.{
                     DEBUG_VIRTUAL_WINDOW_OFFSET,
@@ -365,7 +357,7 @@ inline fn populateInputQueue(self: *@This(), sdlEvent: sdl.SDL_Event) !void {
                 sdlEvent.motion.x,
                 sdlEvent.motion.y,
             };
-            if (DEBUG_VIRTUAL_WINDOW) {
+            if (self.debugDrawVirtualWindow) {
                 const size = self.getWindowSize();
                 if (!vec.isVec2fInsideVec4f(.{
                     DEBUG_VIRTUAL_WINDOW_OFFSET,
@@ -423,7 +415,6 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
     defer allocator.free(titleBuffer);
 
     var timeSinceLastDraw = sdl.SDL_GetPerformanceCounter();
-    const frequency = sdl.SDL_GetPerformanceFrequency();
 
     while (!self.shouldClose()) {
         if (drawNextFrame) {
@@ -433,14 +424,7 @@ pub fn startEventLoop(self: *@This(), allocator: std.mem.Allocator, parentWidget
 
             self.layout(parentWidget);
 
-            const timeBeforeDraw = (sdl.SDL_GetPerformanceCounter() - timeSinceLastDraw) / (frequency / 1000);
             try self.draw(parentWidget);
-            const timeAfterDraw = (sdl.SDL_GetPerformanceCounter() - timeSinceLastDraw) / (frequency / 1000);
-
-            std.log.debug("times: {any} {any}", .{
-                timeBeforeDraw,
-                timeAfterDraw,
-            });
 
             timeSinceLastDraw = sdl.SDL_GetPerformanceCounter();
 

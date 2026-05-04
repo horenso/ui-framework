@@ -56,8 +56,6 @@ scrollProxy: ScrollProxy,
 
 showGrid: bool = false,
 
-outlineColor: Color,
-
 pub fn init(app: *Application, renderer: Renderer, fontManager: *FontManager) !@This() {
     var lines: std.DoublyLinkedList = .{};
     var emptyLine = try app.allocator.create(LineData);
@@ -79,7 +77,6 @@ pub fn init(app: *Application, renderer: Renderer, fontManager: *FontManager) !@
         .longestLine = emptyLine,
         .cursor = .{ .width = getCursorWidth(fontAtlas.width) },
         .scrollProxy = .{ .scrollContainer = null },
-        .outlineColor = Color.random(),
     };
 }
 
@@ -573,7 +570,12 @@ fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
 pub fn draw(opaquePtr: *const anyopaque, renderer: *Renderer) !void {
     const self: *const @This() = @ptrCast(@alignCast(opaquePtr));
 
-    renderer.outline(.{ 0, 0, self.base.size[0], self.base.size[1] }, self.outlineColor);
+    if (self.base.app.debugDrawOutlines) {
+        renderer.outline(
+            .{ 0, 0, self.base.size[0], self.base.size[1] },
+            Application.DEBUG_OUTLINE_COLOR,
+        );
+    }
 
     self.drawText(renderer);
     if (self.showGrid) {
