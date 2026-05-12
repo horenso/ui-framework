@@ -526,7 +526,7 @@ fn drawText(self: *const @This(), renderer: *Renderer) void {
     }
 }
 
-fn drawGridLines(self: *const @This(), renderer: *const Renderer) void {
+fn drawGridLines(self: *const @This(), renderer: *Renderer) void {
     const cellHeight = self.fontAtlas.height;
     const cellWidth = self.fontAtlas.width;
 

@@ -13,6 +13,7 @@ const Key = i32;
 const Renderer = @import("Renderer.zig");
 
 const FONT_PATH = "res/VictorMonoAll/VictorMono-Medium.ttf";
+const ATLAS_SIZE = Renderer.ATLAS_SIZE;
 
 library: freetype.FT_Library,
 fontFace: *freetype.FT_FaceRec,
@@ -42,6 +43,8 @@ pub fn init() !@This() {
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     for (self.cache.values()) |fontAtlas| {
         fontAtlas.glyphs.deinit(allocator);
+        allocator.free(fontAtlas.cpuPixels);
+        // GPU resources are released by the Renderer when the device is destroyed.
         allocator.destroy(fontAtlas);
     }
     self.cache.deinit(allocator);
@@ -65,9 +68,6 @@ pub fn getFontAtlas(
         return atlas;
     }
 
-    // font face is global for now
-    // 0 here means the width is automatic
-    // TODO error handling
     _ = freetype.FT_Set_Pixel_Sizes(self.fontFace, 0, @intCast(size));
 
     const metrics = self.fontFace.*.size.*.metrics;
@@ -76,19 +76,23 @@ pub fn getFontAtlas(
     const height: f32 = @floatFromInt(metrics.height >> 6);
     const baseline: f32 = @floatFromInt(metrics.descender >> 6);
 
-    // Create SDL texture atlas (RGBA or A8)
-    const texture = sdl.SDL_CreateTexture(
-        renderer.sdlRenderer,
-        sdl.SDL_PIXELFORMAT_RGBA32,
-        sdl.SDL_TEXTUREACCESS_STREAMING,
-        1024,
-        1024,
-    ) orelse return error.SDLError;
+    const texture = renderer.createTexture().sdlTexture;
+
+    const transferInfo: sdl.SDL_GPUTransferBufferCreateInfo = .{
+        .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = ATLAS_SIZE * ATLAS_SIZE,
+    };
+    const transferBuffer = sdl.SDL_CreateGPUTransferBuffer(renderer.device, &transferInfo) orelse return error.SDLError;
+
+    const cpuPixels = try allocator.alloc(u8, ATLAS_SIZE * ATLAS_SIZE);
+    @memset(cpuPixels, 0);
 
     const atlas = try allocator.create(FontAtlas);
     atlas.* = .{
         .fontFace = self.fontFace,
         .texture = texture,
+        .transferBuffer = transferBuffer,
+        .cpuPixels = cpuPixels,
         .glyphs = .empty,
         .nextX = 0,
         .nextY = 0,
@@ -97,6 +101,7 @@ pub fn getFontAtlas(
         .width = width,
         .height = height,
         .baseline = baseline,
+        .dirty = false,
     };
     try self.cache.put(allocator, size, atlas);
 
@@ -104,18 +109,18 @@ pub fn getFontAtlas(
 }
 
 pub const GlyphInfo = struct {
+    /// Normalized UV rectangle: { u0, v0, u1, v1 }.
     uv: Vec4f,
-    size: Vec2i, // glyph bitmap size
-    bearing: Vec2i, // left/top offsets
-    advance: i32, // advance.x (in 1/64 pixels)
-
+    size: Vec2i,
+    bearing: Vec2i,
+    advance: i32,
 };
 
 pub const FontAtlas = struct {
-    // For now we always give the one pointer to the same font face
-    // later we need a cache for the fontFace and a separate one for the size
     fontFace: *freetype.FT_FaceRec,
-    texture: *sdl.SDL_Texture,
+    texture: *sdl.SDL_GPUTexture,
+    transferBuffer: *sdl.SDL_GPUTransferBuffer,
+    cpuPixels: []u8,
     glyphs: std.AutoHashMapUnmanaged(u32, GlyphInfo),
     nextX: i32,
     nextY: i32,
@@ -126,8 +131,15 @@ pub const FontAtlas = struct {
     height: f32,
     baseline: f32,
 
+    /// True if cpuPixels was modified since the last GPU upload.
+    dirty: bool,
+
     pub fn getGlyph(atlas: *FontAtlas, allocator: std.mem.Allocator, codepoint: u32) !GlyphInfo {
         if (atlas.glyphs.get(codepoint)) |info| return info;
+
+        // FreeType state is per-face and may have been left configured for a different size
+        // (e.g. when a previous atlas of a different size was used most recently). Re-set it.
+        _ = freetype.FT_Set_Pixel_Sizes(atlas.fontFace, 0, @intCast(atlas.fontSize));
 
         const err = freetype.FT_Load_Char(atlas.fontFace, codepoint, freetype.FT_LOAD_RENDER);
         if (err != 0) return error.FreetypeLoadError;
@@ -135,47 +147,31 @@ pub const FontAtlas = struct {
         const slot = atlas.fontFace.*.glyph;
         const bmp = slot.*.bitmap;
 
-        // Pack into atlas
-        if (atlas.nextX + @as(i32, @intCast(bmp.width)) > 1024) {
+        if (atlas.nextX + @as(i32, @intCast(bmp.width)) > ATLAS_SIZE) {
             atlas.nextX = 0;
             atlas.nextY += atlas.rowHeight;
             atlas.rowHeight = 0;
         }
 
-        const dst_rect: sdl.SDL_Rect = .{
-            .x = atlas.nextX,
-            .y = atlas.nextY,
-            .w = @intCast(bmp.width),
-            .h = @intCast(bmp.rows),
-        };
+        const dst_x: i32 = atlas.nextX;
+        const dst_y: i32 = atlas.nextY;
+        const w_u: usize = @intCast(bmp.width);
+        const h_u: usize = @intCast(bmp.rows);
+        const pitch_u: usize = @intCast(@abs(bmp.pitch));
 
-        const glyph_buffer_size: usize = @as(usize, @intCast(bmp.width)) * @as(usize, @intCast(bmp.rows)) * 4;
-        var glyph_buffer = try allocator.alloc(u8, glyph_buffer_size);
-        defer allocator.free(glyph_buffer);
-
-        for (0..@as(usize, @as(usize, @intCast(bmp.rows)))) |y| {
-            for (0..@as(usize, @as(usize, @intCast(bmp.width)))) |x| {
-                const gray_value = bmp.buffer[y * @as(usize, @intCast(bmp.pitch)) + x];
-                const rgba_offset = (y * @as(usize, @intCast(bmp.width)) + x) * 4;
-                glyph_buffer[rgba_offset] = gray_value; // R
-                glyph_buffer[rgba_offset + 1] = gray_value; // G
-                glyph_buffer[rgba_offset + 2] = gray_value; // B
-                glyph_buffer[rgba_offset + 3] = gray_value; // A
+        for (0..h_u) |y| {
+            const src_row_off = y * pitch_u;
+            const dst_row_off = (@as(usize, @intCast(dst_y)) + y) * ATLAS_SIZE + @as(usize, @intCast(dst_x));
+            for (0..w_u) |x| {
+                atlas.cpuPixels[dst_row_off + x] = bmp.buffer[src_row_off + x];
             }
         }
 
-        _ = sdl.SDL_UpdateTexture(
-            atlas.texture,
-            &dst_rect,
-            @ptrCast(glyph_buffer),
-            @as(c_int, @intCast(bmp.width)) * 4,
-        );
-
         const uv: Vec4f = .{
-            @as(f32, @floatFromInt(dst_rect.x)) / 1024.0,
-            @as(f32, @floatFromInt(dst_rect.y)) / 1024.0,
-            @as(f32, @floatFromInt(dst_rect.x + dst_rect.w)) / 1024.0,
-            @as(f32, @floatFromInt(dst_rect.y + dst_rect.h)) / 1024.0,
+            @as(f32, @floatFromInt(dst_x)) / @as(f32, @floatFromInt(ATLAS_SIZE)),
+            @as(f32, @floatFromInt(dst_y)) / @as(f32, @floatFromInt(ATLAS_SIZE)),
+            @as(f32, @floatFromInt(dst_x + @as(i32, @intCast(bmp.width)))) / @as(f32, @floatFromInt(ATLAS_SIZE)),
+            @as(f32, @floatFromInt(dst_y + @as(i32, @intCast(bmp.rows)))) / @as(f32, @floatFromInt(ATLAS_SIZE)),
         };
 
         const info: GlyphInfo = .{
@@ -189,6 +185,7 @@ pub const FontAtlas = struct {
         atlas.nextX += @intCast(bmp.width);
         if (bmp.rows > atlas.rowHeight) atlas.rowHeight = @intCast(bmp.rows);
 
+        atlas.dirty = true;
         return info;
     }
 };

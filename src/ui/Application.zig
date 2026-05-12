@@ -76,13 +76,13 @@ pub fn init(comptime config: Config, allocator: std.mem.Allocator) error{ OutOfM
         config.title,
         config.width,
         config.height,
-        sdl.SDL_WINDOW_VULKAN | sdl.SDL_WINDOW_RESIZABLE,
+        sdl.SDL_WINDOW_RESIZABLE | sdl.SDL_WINDOW_HIGH_PIXEL_DENSITY,
     ) orelse return error.InitFailure;
 
     _ = sdl.SDL_SetWindowMinimumSize(sdlWindow, 300, 300);
     _ = sdl.SDL_StartTextInput(sdlWindow);
 
-    const renderer = try Renderer.init(sdlWindow);
+    const renderer = try Renderer.init(allocator, sdlWindow);
 
     // Set the I-beam cursor
     const pointers: SdlPointers = .{
@@ -112,6 +112,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     _ = sdl.SDL_DestroyCursor(self._sdlState.pointers.move);
 
     self.renderer.deinit();
+    // Window must be destroyed AFTER the GPU device releases it (handled in renderer.deinit).
     sdl.SDL_DestroyWindow(self._sdlState.window);
 
     sdl.SDL_Quit();
